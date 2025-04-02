@@ -1,3 +1,84 @@
+# Chicago Taxi Trips Analysis
+
+This project analyzes the Chicago Taxi Trips dataset to extract insights about taxi usage patterns, trip characteristics, and geographical distribution of rides.
+
+## Project Structure
+
+```
+chicago-taxi-genai-demo/
+├── config/
+│   └── config.yaml         # Configuration parameters
+├── data/
+│   ├── raw/               # Raw data files
+│   └── processed/         # Processed data files
+├── docs/                  # Documentation files
+├── notebooks/
+│   └── 1_EDA.ipynb       # Exploratory Data Analysis
+├── src/
+│   ├── __init__.py
+│   ├── data_processing.py # Data processing utilities
+│   └── visualization.py   # Visualization functions
+├── tests/
+│   ├── __init__.py
+│   └── test_data_processing.py
+├── .gitignore
+├── README.md
+└── requirements.txt
+```
+
+## Setup
+
+1. Clone the repository:
+```bash
+git clone https://github.com/gvern/chicago-taxi-genai-demo.git
+cd chicago-taxi-genai-demo
+```
+
+2. Create and activate a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Download the Chicago Taxi Trips dataset and place it in the `data/raw/` directory.
+
+5. Run the tests:
+```bash
+pytest tests/
+```
+
+## Usage
+
+1. Configure the parameters in `config/config.yaml`
+2. Explore the data using the Jupyter notebook in `notebooks/1_EDA.ipynb`
+3. Use the functions in `src/` for data processing and visualization
+
+## Features
+
+- Data preprocessing and cleaning
+- Exploratory data analysis
+- Temporal analysis of taxi trips
+- Geographical visualization of pickup and dropoff locations
+- Trip duration and distance analysis
+- Fare analysis
+
+## Contributing
+
+1. Fork the repository
+2. Create a new branch for your feature
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
 # chicago-taxi-genai-demo
 
 
