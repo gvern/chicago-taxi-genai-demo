@@ -11,3 +11,5 @@ pytest>=7.3.0
 missingno>=0.5.0
 pandas-gbq>=1.0.0
 mpl_toolkits.basemap
+google-cloud-bigquery 
+holidays
