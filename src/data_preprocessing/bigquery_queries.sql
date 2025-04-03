@@ -1,4 +1,8 @@
- -- Aggregation horaire par pickup_community_area
+-- Create the dataset if it doesn't exist
+CREATE SCHEMA IF NOT EXISTS `avisia-certification-ml-yde.chicago_taxis`
+OPTIONS(location="US");
+
+-- Aggregation horaire par pickup_community_area
 CREATE OR REPLACE TABLE `avisia-certification-ml-yde.chicago_taxis.demand_by_hour` AS
 SELECT
   TIMESTAMP_TRUNC(trip_start_timestamp, HOUR) AS timestamp_hour,
