@@ -23,6 +23,14 @@ feature_engineering:
     - precipitation
     - wind_speed
 
+forecasting:
+  time_column: timestamp_hour
+  target_column: trip_count
+  time_granularity: "hour"
+  context_column: pickup_community_area
+  forecast_horizon: 24
+  window_size: 168
+
 # Model Parameters
 model:
   type: "xgboost"
