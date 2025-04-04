@@ -1,56 +1,79 @@
 import pandas as pd
 from datetime import datetime, timedelta
 from google.cloud import bigquery
+import holidays
 
+# Configuration
 PROJECT_ID = "avisia-certification-ml-yde"
-BQ_TABLE_TARGET = "chicago_taxis.forecast_input"
-HORIZON_HOURS = 24  # modifier si nécessaire
-BQ_TRAINING_TABLE = "chicago_taxis.demand_by_hour"
+DATASET = "chicago_taxis"
+TABLE_INPUT = f"{PROJECT_ID}.{DATASET}.forecast_input"
+TABLE_REF = f"{PROJECT_ID}.{DATASET}.demand_by_hour"
+HORIZON_HOURS = 24  # à ajuster si besoin
 
+# Initialise le client BQ
+client = bigquery.Client(project=PROJECT_ID)
 
-def get_unique_zones(client, table=BQ_TRAINING_TABLE):
+def get_unique_zones():
     """Récupère les pickup_community_area uniques depuis la table de training."""
     query = f"""
     SELECT DISTINCT pickup_community_area
-    FROM `{PROJECT_ID}.{table}`
+    FROM `{TABLE_REF}`
     WHERE pickup_community_area IS NOT NULL
     """
     return client.query(query).to_dataframe()
 
-
-def generate_future_timestamps(horizon_hours: int):
-    """Génère les timestamps futurs horaires à horizon donné."""
+def get_future_timestamps(n_hours=HORIZON_HOURS):
+    """Génère une liste d'horodatages horaires futurs (arrondis)"""
     now = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
-    return [now + timedelta(hours=i) for i in range(1, horizon_hours + 1)]
+    return [now + timedelta(hours=i) for i in range(1, n_hours + 1)]
 
+def get_chicago_holidays(start_date, end_date):
+    """Renvoie les jours fériés américains (Chicago)"""
+    us_holidays = holidays.US(years=range(start_date.year, end_date.year + 1))
+    return set(us_holidays.keys())
 
-def generate_forecast_input(horizon_hours: int = HORIZON_HOURS,
-                            project_id: str = PROJECT_ID,
-                            training_table: str = BQ_TRAINING_TABLE) -> pd.DataFrame:
-    client = bigquery.Client(project=project_id)
-    zones = get_unique_zones(client, table=training_table)
-    future_timestamps = generate_future_timestamps(horizon_hours)
+def generate_forecast_input():
+    # Étape 1 : Récupérer les zones
+    zones_df = get_unique_zones()
+    
+    # Étape 2 : Générer le cartésien zones × timestamps
+    timestamps = get_future_timestamps()
+    start, end = timestamps[0], timestamps[-1]
+    holidays_set = get_chicago_holidays(start, end)
 
-    # Produit le cartésien des zones × timestamps
-    input_data = pd.DataFrame(
-        [(zone, ts) for zone in zones["pickup_community_area"] for ts in future_timestamps],
-        columns=["pickup_community_area", "timestamp_hour"]
+    rows = []
+    for zone in zones_df["pickup_community_area"]:
+        for ts in timestamps:
+            rows.append({
+                "pickup_community_area": zone,
+                "timestamp_hour": ts,
+                "hour": ts.hour,
+                "day_of_week": ts.weekday(),
+                "month": ts.month,
+                "is_weekend": ts.weekday() >= 5,
+                "is_holiday": ts.date() in holidays_set
+            })
+    
+    df = pd.DataFrame(rows)
+    return df
+
+def write_to_bigquery(df: pd.DataFrame):
+    """Écrit le dataframe dans BigQuery avec schéma défini"""
+    job_config = bigquery.LoadJobConfig(
+        write_disposition="WRITE_TRUNCATE",
+        schema=[
+            bigquery.SchemaField("pickup_community_area", "INTEGER"),
+            bigquery.SchemaField("timestamp_hour", "TIMESTAMP"),
+            bigquery.SchemaField("hour", "INTEGER"),
+            bigquery.SchemaField("day_of_week", "INTEGER"),
+            bigquery.SchemaField("month", "INTEGER"),
+            bigquery.SchemaField("is_weekend", "BOOLEAN"),
+            bigquery.SchemaField("is_holiday", "BOOLEAN")
+        ]
     )
-
-    # Ajout éventuel de features temporelles
-    input_data["hour"] = input_data["timestamp_hour"].dt.hour
-    input_data["day_of_week"] = input_data["timestamp_hour"].dt.dayofweek
-    input_data["month"] = input_data["timestamp_hour"].dt.month
-
-    return input_data
-
-
-def write_to_bigquery(df: pd.DataFrame,
-                      table: str = BQ_TABLE_TARGET,
-                      project_id: str = PROJECT_ID):
-    df.to_gbq(destination_table=table, project_id=project_id, if_exists="replace")
-    print(f"✅ Données écrites dans BigQuery : {table}")
-
+    job = client.load_table_from_dataframe(df, TABLE_INPUT, job_config=job_config)
+    job.result()
+    print(f"✅ Table {TABLE_INPUT} créée avec {len(df)} lignes.")
 
 if __name__ == "__main__":
     df_input = generate_forecast_input()

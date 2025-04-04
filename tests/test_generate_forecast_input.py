@@ -4,30 +4,41 @@ from datetime import datetime
 
 from src.generate_forecast_input import generate_forecast_input
 
-
-def test_generate_forecast_input_structure():
-    """Test que la sortie contient les colonnes attendues et au moins une ligne"""
-    df = generate_forecast_input(horizon_hours=5)  # horizon réduit pour test rapide
+def test_output_is_dataframe():
+    """Test que la sortie est un DataFrame non vide avec les bonnes colonnes"""
+    df = generate_forecast_input()
     assert isinstance(df, pd.DataFrame)
     assert not df.empty
-    expected_columns = {
+
+    expected_cols = {
         "pickup_community_area",
         "timestamp_hour",
         "hour",
         "day_of_week",
-        "month"
+        "month",
+        "is_weekend",
+        "is_holiday"
     }
-    assert expected_columns.issubset(df.columns)
+    assert expected_cols.issubset(df.columns)
 
-
-def test_future_timestamps_are_in_future():
-    """Test que toutes les timestamps sont bien dans le futur"""
-    df = generate_forecast_input(horizon_hours=5)
+def test_timestamps_are_in_future():
+    """Test que tous les timestamp_hour sont bien futurs"""
+    df = generate_forecast_input()
     now = datetime.utcnow()
-    assert all(pd.to_datetime(df["timestamp_hour"]) > now)
+    assert (df["timestamp_hour"] > now).all()
 
+def test_no_duplicates():
+    """Test qu'il n'y a pas de doublons zone + timestamp"""
+    df = generate_forecast_input()
+    assert df.duplicated(subset=["pickup_community_area", "timestamp_hour"]).sum() == 0
 
-def test_no_duplicate_series():
-    """Test qu'il n'y a pas de doublons timestamp + zone"""
-    df = generate_forecast_input(horizon_hours=5)
-    assert df.duplicated(subset=["timestamp_hour", "pickup_community_area"]).sum() == 0
+def test_data_types():
+    """Test des types de données attendus"""
+    df = generate_forecast_input()
+    assert pd.api.types.is_integer_dtype(df["pickup_community_area"])
+    assert pd.api.types.is_datetime64_any_dtype(df["timestamp_hour"])
+    assert pd.api.types.is_integer_dtype(df["hour"])
+    assert pd.api.types.is_integer_dtype(df["day_of_week"])
+    assert pd.api.types.is_integer_dtype(df["month"])
+    assert pd.api.types.is_bool_dtype(df["is_weekend"])
+    assert pd.api.types.is_bool_dtype(df["is_holiday"])
