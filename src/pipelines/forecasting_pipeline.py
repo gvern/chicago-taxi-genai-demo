@@ -31,8 +31,7 @@ def forecasting_pipeline(
 ):
     # Étape 1 : Générer la table BigQuery finale
     query_job = run_bq_forecasting_query(
-        query=bq_query,
-        project=project,
+        project_id=project,
         location=location
     )
 
