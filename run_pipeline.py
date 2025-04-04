@@ -1,38 +1,48 @@
-#!/usr/bin/env python
-import os
-import sys
-import subprocess
-
-# Ajouter le répertoire courant au PYTHONPATH
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-
-# Installer le package en mode développement si nécessaire
-try:
-    import src
-except ImportError:
-    print("Installation du package en mode développement...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", "."])
-    print("Package installé avec succès!")
-
-# Importer et exécuter le pipeline
+import yaml
+from kfp.v2 import compiler
+from google.cloud import aiplatform
 from src.pipelines.forecasting_pipeline import forecasting_pipeline
 
-if __name__ == "__main__":
-    # Paramètres du pipeline
-    project = "your-project-id"  # Remplacez par votre ID de projet
-    location = "us-central1"     # Remplacez par votre région
-    
-    # Exécuter le pipeline
-    forecasting_pipeline(
-        project=project,
-        location=location,
-        bq_query="SELECT * FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips` LIMIT 1000",
-        bq_output_uri="bq://your-project-id.chicago_taxis.demand_by_hour",
-        dataset_display_name="chicago-taxi-demand-dataset",
-        forecast_model_display_name="chicago-taxi-demand-model",
-        target_column="trip_count",
-        time_column="timestamp_hour",
-        time_series_identifier_column="pickup_community_area",
-        forecast_horizon=24,
-        context_window=168
-    ) 
+# === 1. Charger la configuration YAML ===
+with open("config/pipeline_config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+
+# === 2. Paramètres GCP / Pipeline ===
+PROJECT_ID = "avisia-certification-ml-yde"
+REGION = "us-central1"
+PIPELINE_ROOT = f"gs://{PROJECT_ID}-vertex-bucket/pipeline_artifacts"
+
+# Table BQ de sortie générée par la requête d'agrégation
+BQ_DATASET = "chicago_taxis"
+BQ_TABLE = "demand_by_hour"
+BQ_URI = f"bq://{PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE}"
+
+# Nom du job
+PIPELINE_NAME = "chicago-taxi-forecasting"
+
+# === 3. Lancer le pipeline ===
+aiplatform.init(project=PROJECT_ID, location=REGION, staging_bucket=PIPELINE_ROOT)
+
+job = forecasting_pipeline(
+    project=PROJECT_ID,
+    location=REGION,
+    bq_query="",  # le composant run_bq_forecasting_query embarque la requête
+    bq_output_uri=BQ_URI,
+    dataset_display_name=config["vertex_ai_forecast"]["display_name"] + "-dataset",
+    forecast_model_display_name=config["vertex_ai_forecast"]["display_name"],
+    target_column=config["forecasting"]["target_column"],
+    time_column=config["forecasting"]["time_column"],
+    time_series_identifier_column=config["forecasting"]["context_column"],
+    forecast_horizon=config["forecasting"]["forecast_horizon"],
+    context_window=config["forecasting"]["window_size"],
+    data_granularity_unit=config["forecasting"]["data_granularity_unit"],
+    data_granularity_count=1,
+    optimization_objective=config["vertex_ai_forecast"]["optimization_objective"],
+    available_at_forecast_columns=config["forecasting"]["available_at_forecast"],
+    unavailable_at_forecast_columns=config["forecasting"]["unavailable_at_forecast"],
+    budget_milli_node_hours=config["vertex_ai_forecast"]["budget_milli_node_hours"]
+)
+
+job.run(sync=True)
+
+print(f"✅ Pipeline '{PIPELINE_NAME}' lancé avec succès sur Vertex AI Pipelines.")
