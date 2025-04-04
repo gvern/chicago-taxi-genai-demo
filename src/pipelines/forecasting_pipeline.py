@@ -44,12 +44,16 @@ def forecasting_pipeline(
         dataset_resource_name=dataset_creation.outputs["dataset_resource_name"]
     )
 
+    # Read the dataset resource name from the file
+    with open(dataset_creation.path, "r") as f:
+        dataset_resource_name = f.read().strip()
+
     # Étape 3 : Entraîner le modèle Vertex AI Forecasting
     train_model = train_forecasting_model(
         project=project,
         location=location,
         display_name=forecast_model_display_name,
-        dataset_resource_name=dataset_creation.outputs["dataset_resource_name"],
+        dataset_resource_name=dataset_resource_name,
         target_column=target_column,
         time_column=time_column,
         time_series_identifier_column=time_series_identifier_column,
