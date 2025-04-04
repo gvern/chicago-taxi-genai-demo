@@ -41,9 +41,7 @@ def forecasting_pipeline(
         location=location,
         display_name=dataset_display_name,
         bq_source_uri=bq_output_uri,
-        time_column=time_column,
-        target_column=target_column,
-        time_series_identifier_column=time_series_identifier_column
+        dataset_resource_name=dataset_creation.outputs["dataset_resource_name"]
     )
 
     # Étape 3 : Entraîner le modèle Vertex AI Forecasting
