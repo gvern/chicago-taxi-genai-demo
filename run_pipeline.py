@@ -1,5 +1,5 @@
 import yaml
-from kfp.v2 import compiler
+from kfp import compiler
 from google.cloud import aiplatform
 from src.pipelines.forecasting_pipeline import forecasting_pipeline
 
