@@ -1,10 +1,9 @@
 from kfp import dsl
-#from kfp.dsl import Input, Output, Artifact, Dataset, Model, component
-#rom google_cloud_pipeline_components import aiplatform as gcc_aip
 
 from src.pipelines.components.run_bq_forecasting_query import run_bq_forecasting_query
 from src.pipelines.components.create_timeseries_dataset import create_timeseries_dataset
 from src.pipelines.components.train_forecasting_model import train_forecasting_model
+
 
 @dsl.pipeline(
     name="forecasting-pipeline",
@@ -40,20 +39,15 @@ def forecasting_pipeline(
         project=project,
         location=location,
         display_name=dataset_display_name,
-        bq_source_uri=bq_output_uri,
-        dataset_resource_name=dataset_creation.outputs["dataset_resource_name"]
+        bq_source_uri=bq_output_uri
     )
-
-    # Read the dataset resource name from the file
-    with open(dataset_creation.path, "r") as f:
-        dataset_resource_name = f.read().strip()
 
     # Étape 3 : Entraîner le modèle Vertex AI Forecasting
     train_model = train_forecasting_model(
         project=project,
         location=location,
         display_name=forecast_model_display_name,
-        dataset_resource_name=dataset_resource_name,
+        dataset_resource_name=dataset_creation.outputs["dataset_resource_name"],
         target_column=target_column,
         time_column=time_column,
         time_series_identifier_column=time_series_identifier_column,
