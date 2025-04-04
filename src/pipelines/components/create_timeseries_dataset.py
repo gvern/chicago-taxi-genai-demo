@@ -1,4 +1,4 @@
-from kfp.v2.dsl import component, Output, Artifact
+from kfp.dsl import component, Output, Artifact
 from google.cloud import aiplatform
 
 @component(

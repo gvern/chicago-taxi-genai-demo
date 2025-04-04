@@ -1,6 +1,6 @@
-from kfp.v2 import dsl
-from kfp.v2.dsl import Input, Output, Artifact, Dataset, Model, component
-from google_cloud_pipeline_components import aiplatform as gcc_aip
+from kfp import dsl
+#from kfp.dsl import Input, Output, Artifact, Dataset, Model, component
+#rom google_cloud_pipeline_components import aiplatform as gcc_aip
 
 from src.pipelines.components.run_bq_forecasting_query import run_bq_forecasting_query
 from src.pipelines.components.create_timeseries_dataset import create_timeseries_dataset

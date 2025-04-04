@@ -1,5 +1,5 @@
 from typing import Optional
-from kfp.v2.dsl import component
+from kfp.dsl import component
 from google.cloud import bigquery
 
 @component(

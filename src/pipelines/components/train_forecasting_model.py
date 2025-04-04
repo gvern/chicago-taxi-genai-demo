@@ -1,5 +1,5 @@
 from typing import List
-from kfp.v2.dsl import component, Input, Output, Artifact
+from kfp.dsl import component, Input, Output, Artifact
 from google.cloud import aiplatform
 
 @component(
