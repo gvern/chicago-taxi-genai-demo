@@ -1,5 +1,5 @@
 from typing import List
-from kfp.v2.dsl import component
+from kfp.v2.dsl import component, Input, Output, Artifact
 from google.cloud import aiplatform
 
 @component(
@@ -10,7 +10,7 @@ def train_forecasting_model(
     project: str,
     location: str,
     display_name: str,
-    dataset_resource_name: str,
+    dataset_resource_name: Input[Artifact],
     target_column: str,
     time_column: str,
     time_series_identifier_column: str,
@@ -21,8 +21,9 @@ def train_forecasting_model(
     optimization_objective: str = "minimize-rmse",
     available_at_forecast_columns: List[str] = [],
     unavailable_at_forecast_columns: List[str] = [],
-    budget_milli_node_hours: int = 1000
-) -> str:
+    budget_milli_node_hours: int = 1000,
+    model_resource_name: Output[Artifact] = None
+):
     """
     Entraîne un modèle Vertex AI Forecasting.
     """
@@ -30,12 +31,11 @@ def train_forecasting_model(
 
     job = aiplatform.AutoMLForecastingTrainingJob(
         display_name=display_name,
-        optimization_objective=optimization_objective,
-        column_specs=None,
+        optimization_objective=optimization_objective
     )
 
     model = job.run(
-        dataset=dataset_resource_name,
+        dataset=dataset_resource_name.path.read(),  # récupère le nom du dataset via le fichier Artifact
         target_column=target_column,
         time_column=time_column,
         time_series_identifier_column=time_series_identifier_column,
@@ -49,5 +49,5 @@ def train_forecasting_model(
         model_display_name=f"{display_name}_model"
     )
 
+    model_resource_name.path.open("w").write(model.resource_name)
     print(f"✅ Modèle entraîné : {model.resource_name}")
-    return model.resource_name

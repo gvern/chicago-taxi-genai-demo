@@ -2,7 +2,7 @@ from kfp.v2 import dsl
 from kfp.v2.dsl import Input, Output, Artifact, Dataset, Model, component
 from google_cloud_pipeline_components import aiplatform as gcc_aip
 
-from src.pipelines.components.run_bigquery_query import run_bigquery_query
+from src.pipelines.components.run_bq_forecasting_query import run_bq_forecasting_query
 from src.pipelines.components.create_timeseries_dataset import create_timeseries_dataset
 from src.pipelines.components.train_forecasting_model import train_forecasting_model
 
@@ -30,7 +30,7 @@ def forecasting_pipeline(
     budget_milli_node_hours: int = 1000,
 ):
     # Étape 1 : Générer la table BigQuery finale
-    query_job = run_bigquery_query(
+    query_job = run_bq_forecasting_query(
         query=bq_query,
         project=project,
         location=location
