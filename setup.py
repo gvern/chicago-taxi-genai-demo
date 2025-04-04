@@ -15,6 +15,6 @@ setup(
         "pydantic>=2.0.0",
         "google-cloud-pipeline-components>=0.1.0",
         "xgboost>=2.0.0",
-        "kfp-sdk>=2.5.0",
+        "kfp-sdk",
     ],
 ) 
