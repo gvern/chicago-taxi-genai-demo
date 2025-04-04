@@ -40,7 +40,7 @@ def forecasting_pipeline(
         location=location,
         display_name=dataset_display_name,
         bq_source_uri=bq_output_uri
-    )
+    ).after(query_job)
 
     # Étape 3 : Entraîner le modèle Vertex AI Forecasting
     train_model = train_forecasting_model(
@@ -59,4 +59,4 @@ def forecasting_pipeline(
         available_at_forecast_columns=available_at_forecast_columns,
         unavailable_at_forecast_columns=unavailable_at_forecast_columns,
         budget_milli_node_hours=budget_milli_node_hours
-    )
+    ).after(dataset_creation)
