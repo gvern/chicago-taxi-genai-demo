@@ -8,7 +8,7 @@ from google.cloud import bigquery
 )
 def run_bq_forecasting_query(
     project_id: str,
-    location: str = "US",
+    location: str = "europe-west1",
     dataset_id: str = "chicago_taxis",
     destination_table: str = "demand_by_hour",
     sql_output_table: Optional[str] = None,
@@ -17,6 +17,8 @@ def run_bq_forecasting_query(
     Exécute la requête BigQuery pour générer la table d'agrégation forecasting (timestamp_hour × pickup_community_area).
     Retourne l'URI de la table créée.
     """
+    from google.cloud import bigquery  # ← Cette ligne est indispensable
+
     client = bigquery.Client(project=project_id, location=location)
     
     table_uri = f"{project_id}.{dataset_id}.{destination_table}"
