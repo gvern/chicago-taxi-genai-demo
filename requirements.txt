@@ -13,3 +13,5 @@ pandas-gbq>=1.0.0
 mpl_toolkits.basemap
 google-cloud-bigquery 
 holidays
+google-cloud-aiplatform>=1.36.0
+kfp>=2.5.0
