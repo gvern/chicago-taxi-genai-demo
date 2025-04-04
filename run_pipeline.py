@@ -1,7 +1,12 @@
 import yaml
-from kfp import compiler
+from kfp import local
+from kfp import dsl
 from google.cloud import aiplatform
 from src.pipelines.forecasting_pipeline import forecasting_pipeline
+from kfp.local import init  # Import the local initialization function
+# Initialize the local environment with a valid runner
+local.init(runner=local.SubprocessRunner())
+
 
 # === 1. Charger la configuration YAML ===
 with open("config/pipeline_config.yaml", "r") as f:
@@ -9,7 +14,8 @@ with open("config/pipeline_config.yaml", "r") as f:
 
 # === 2. Paramètres GCP / Pipeline ===
 PROJECT_ID = "avisia-certification-ml-yde"
-REGION = "us-central1"
+REGION = "europe-west1"
+
 PIPELINE_ROOT = f"gs://{PROJECT_ID}-vertex-bucket/pipeline_artifacts"
 
 # Table BQ de sortie générée par la requête d'agrégation
