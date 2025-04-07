@@ -1,66 +1,107 @@
-# Google Cloud Setup Instructions
+# Google Cloud Project Setup Guide
 
-## Prerequisites
-1. Google Cloud account
-2. Google Cloud SDK installed
-3. Project created in Google Cloud Console
+This document guides you through setting up the necessary Google Cloud resources for the Chicago Taxi Forecasting project.
 
-## Project Setup
+## 1. Prerequisites
 
-### 1. Initialize Project
+*   A Google Cloud Platform account with billing enabled.
+*   `gcloud` command-line tool installed and authenticated (`gcloud auth login`).
+*   Sufficient permissions to create projects, buckets, datasets, and enable APIs.
+
+## 2. Project Setup
+
+Choose a unique Google Cloud Project ID. We'll use `avisia-certification-ml-yde` as an example.
+
 ```bash
-# Set project ID
-export PROJECT_ID=chicago-taxi-analysis
-gcloud config set project $PROJECT_ID
+# Set your chosen Project ID
+export PROJECT_ID="avisia-certification-ml-yde"
 
-# Enable required APIs
-gcloud services enable \
-  bigquery.googleapis.com \
-  compute.googleapis.com \
-  aiplatform.googleapis.com \
-  storage.googleapis.com
+# Optional: Create a new project (if you don't have one)
+# gcloud projects create ${PROJECT_ID} --name="Chicago Taxi Forecasting Demo"
+
+# Set the active project for gcloud
+gcloud config set project ${PROJECT_ID}
+
+# Enable necessary APIs
+gcloud services enable \\
+    compute.googleapis.com \\
+    iam.googleapis.com \\
+    aiplatform.googleapis.com \\
+    bigquery.googleapis.com \\
+    cloudbuild.googleapis.com \\
+    cloudresourcemanager.googleapis.com \\
+    containerregistry.googleapis.com
 ```
 
-### 2. Create Storage Bucket
+## 3. Google Cloud Storage (GCS) Bucket
+
+Create a GCS bucket to store pipeline artifacts, model assets, and potentially data staging files. Ensure the bucket name is globally unique.
+
 ```bash
-# Create bucket for data storage
-gsutil mb -l us-central1 gs://${PROJECT_ID}-data
+# Choose a globally unique bucket name (often PROJECT_ID suffixed)
+export BUCKET_NAME="${PROJECT_ID}-vertex-bucket"
+export REGION="us-central1" # Or your preferred region
+
+# Create the bucket in the specified region
+gsutil mb -p ${PROJECT_ID} -l ${REGION} gs://${BUCKET_NAME}
+```
+*   `gs://${BUCKET_NAME}` will be used as `PIPELINE_ROOT` and for storing model artifacts.
+
+## 4. BigQuery Dataset
+
+Create a BigQuery dataset to store the processed taxi demand data.
+
+```bash
+# Choose a dataset name
+export BQ_DATASET="chicago_taxis"
+
+# Create the dataset in the specified region (e.g., US multi-region)
+bq mk --location=US --dataset ${PROJECT_ID}:${BQ_DATASET}
+```
+*   The processed table `demand_by_hour` will reside in `${PROJECT_ID}:${BQ_DATASET}`.
+
+## 5. Service Account (Optional but Recommended)
+
+For running pipelines and interacting with services, it's best practice to use a dedicated service account with specific roles.
+
+```bash
+# Choose a name for your service account
+export SA_NAME="vertex-pipeline-sa"
+export SA_ID="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# Create the service account
+gcloud iam service-accounts create ${SA_NAME} \\
+    --display-name="Vertex AI Pipeline Service Account" \\
+    --project=${PROJECT_ID}
+
+# Grant necessary roles (adjust based on least privilege principle)
+# Common roles needed for Vertex AI Pipelines, BigQuery, GCS:
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \\
+    --member="serviceAccount:${SA_ID}" \\
+    --role="roles/aiplatform.user"
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \\
+    --member="serviceAccount:${SA_ID}" \\
+    --role="roles/storage.objectAdmin" # Access to GCS bucket
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \\
+    --member="serviceAccount:${SA_ID}" \\
+    --role="roles/bigquery.dataEditor" # Read/write BigQuery tables
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \\
+    --member="serviceAccount:${SA_ID}" \\
+    --role="roles/bigquery.jobUser" # Run BigQuery jobs
+
+# You might configure Vertex AI Pipelines to use this service account.
 ```
 
-### 3. Set Up BigQuery
-```bash
-# Create dataset
-bq mk --dataset ${PROJECT_ID}:chicago_taxi_data
+## 6. Vertex AI Workbench (Optional)
 
-# Create tables
-bq mk --table ${PROJECT_ID}:chicago_taxi_data.trips \
-  trip_id:STRING,\
-  trip_start_timestamp:TIMESTAMP,\
-  trip_end_timestamp:TIMESTAMP,\
-  trip_miles:FLOAT,\
-  pickup_latitude:FLOAT,\
-  pickup_longitude:FLOAT,\
-  dropoff_latitude:FLOAT,\
-  dropoff_longitude:FLOAT
+For interactive development and running notebooks, you can create a Vertex AI Workbench instance.
+
+```bash
+# Follow the Google Cloud Console instructions or use gcloud to create a notebook instance.
+# Ensure it has access to the services (e.g., via the service account created above or default compute SA).
 ```
 
-### 4. Configure IAM Permissions
-```bash
-# Grant necessary permissions to service account
-gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-  --member="serviceAccount:${PROJECT_ID}@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/bigquery.dataEditor"
-```
-
-### 5. Vertex AI Setup
-```bash
-# Enable Vertex AI API
-gcloud services enable aiplatform.googleapis.com
-
-# Create service account for Vertex AI
-gcloud iam service-accounts create vertex-ai-sa \
-  --display-name="Vertex AI Service Account"
-```
+Setup is now complete. You can proceed with cloning the repository and following the instructions in the main `README.md`.
 
 ## Environment Variables
 Create a `.env` file with the following variables:

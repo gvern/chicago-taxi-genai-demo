@@ -1,7 +1,6 @@
-
 # 🚖 Forecasting de la Demande de Taxis à Chicago avec Vertex AI
 
-Ce projet propose une solution end-to-end pour prédire le nombre de trajets de taxi (`trip_count`) par **heure** et par **zone (`pickup_community_area`)** dans la ville de Chicago, en exploitant le dataset public BigQuery **Chicago Taxi Trips (187M lignes)**. Il s’appuie sur **BigQuery pour le prétraitement**, **Vertex AI Forecast pour l'entraînement AutoML**, et un déploiement via **prédiction batch**.
+Ce projet propose une solution end-to-end pour prédire le nombre de trajets de taxi (`trip_count`) par **heure** et par **zone (`pickup_community_area`)** dans la ville de Chicago, en exploitant le dataset public BigQuery **Chicago Taxi Trips (187M lignes)**. Il s'appuie sur **BigQuery pour le prétraitement**, **Vertex AI Forecast pour l'entraînement AutoML**, et un déploiement via **prédiction batch**.
 
 ---
 
@@ -9,7 +8,7 @@ Ce projet propose une solution end-to-end pour prédire le nombre de trajets de 
 
 Optimiser la répartition des taxis sur la ville en anticipant la demande horaire par quartier, permettant :
 - une meilleure couverture territoriale,
-- une réduction du temps d’attente client,
+- une réduction du temps d'attente client,
 - une amélioration de l'efficacité de la flotte.
 
 ---
@@ -46,13 +45,11 @@ gvern-chicago-taxi-genai-demo/
 │   ├── model_training/
 │   │   └── train_model.py               # (obsolète) entraînement manuel
 │   ├── data_preprocessing/
-│   │   ├── bigquery_queries.sql         # Requêtes d’agrégation
+│   │   ├── bigquery_queries.sql         # Requêtes d'agrégation
 │   │   └── dataflow_pipeline.py         # Pipeline Beam (optionnel)
 │   ├── pipelines/
 │   │   └── forecasting_pipeline.py      # Pipeline KFP (optionnel)
-│   └── deployment/
-│       ├── run_batch_prediction.py      # Script batch prediction (optionnel)
-│       └── deployment_instructions.md   # Instructions de déploiement
+
 ├── tests/
 │   └── test_data_processing.py          # Tests unitaires
 ├── requirements.txt
@@ -113,9 +110,9 @@ Ce notebook :
 
 ## 📘 Documentation associée
 
-- `docs/whitepaper.md` : Explication complète du pipeline ML, des choix d’architecture, des métriques, des résultats.
+- `docs/whitepaper.md` : Explication complète du pipeline ML, des choix d'architecture, des métriques, des résultats.
 - `config/pipeline_config.yaml` : Configuration du forecasting (horizon, fenêtre, colonnes).
-- `deployment_instructions.md` : Instructions pour servir et utiliser le modèle prédit.
+- `config/gcloud_setup.md` : Instructions pour la configuration de l'environnement GCP.
 
 ---
 
