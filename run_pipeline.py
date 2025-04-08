@@ -1,8 +1,14 @@
 import yaml
+import os
+import sys
+
+# Ajouter le répertoire src au PYTHONPATH
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
+
 from kfp import local
 from kfp import dsl
 from google.cloud import aiplatform
-from src.pipelines.forecasting_pipeline import forecasting_pipeline
+from pipelines.forecasting_pipeline import forecasting_pipeline
 from kfp.local import init  # Import the local initialization function
 # Initialize the local environment with a valid runner
 local.init(runner=local.SubprocessRunner())

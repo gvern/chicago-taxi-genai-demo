@@ -29,7 +29,6 @@ Optimiser la répartition des taxis sur la ville en anticipant la demande horair
 ```
 gvern-chicago-taxi-genai-demo/
 ├── config/
-│   ├── config.yaml                      # Paramètres généraux
 │   ├── gcloud_setup.md                  # Setup des ressources GCP
 │   └── pipeline_config.yaml             # Paramètres de forecasting
 ├── docs/

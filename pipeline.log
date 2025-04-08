@@ -1,0 +1,139 @@
+10:41:05.714 - INFO - Running pipeline: [95m'forecasting-pipeline'[0m
+--------------------------------------------------------------------------------
+10:41:05.716 - INFO - Executing task [96m'run-bq-forecasting-query'[0m
+10:41:05.716 - INFO - Streamed logs:
+
+    ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+    kfp 2.10.1 requires click<9,>=8.0.0, which is not installed.
+    kfp 2.10.1 requires docstring-parser<1,>=0.7.3, which is not installed.
+    kfp 2.10.1 requires google-cloud-storage<3,>=2.2.1, which is not installed.
+    kfp 2.10.1 requires kfp-pipeline-spec==0.5.0, which is not installed.
+    kfp 2.10.1 requires kfp-server-api<2.4.0,>=2.1.0, which is not installed.
+    kfp 2.10.1 requires kubernetes<31,>=8.0.0, which is not installed.
+    kfp 2.10.1 requires PyYAML<7,>=5.3, which is not installed.
+    kfp 2.10.1 requires requests-toolbelt<1,>=0.8.0, which is not installed.
+    kfp 2.10.1 requires tabulate<1,>=0.8.6, which is not installed.
+    kfp 2.10.1 requires protobuf<5,>=4.21.1, but you have protobuf 5.29.4 which is incompatible.
+    kfp 2.10.1 requires urllib3<2.0.0, but you have urllib3 2.3.0 which is incompatible.
+    
+    [notice] A new release of pip is available: 24.3.1 -> 25.0.1
+    [notice] To update, run: /private/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmp3o9g0p8u/bin/python -m pip install --upgrade pip
+    [KFP Executor 2025-04-08 10:41:22,379 INFO]: Looking for component `run_bq_forecasting_query` in --component_module_path `/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmp.bTr7ogtCJe/ephemeral_component.py`
+    [KFP Executor 2025-04-08 10:41:22,379 INFO]: Loading KFP component "run_bq_forecasting_query" from /var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmp.bTr7ogtCJe/ephemeral_component.py (directory "/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmp.bTr7ogtCJe" and module name "ephemeral_component")
+    [KFP Executor 2025-04-08 10:41:22,380 INFO]: Got executor_input:
+    {
+        "inputs": {
+            "parameterValues": {
+                "destination_table": "demand_by_hour",
+                "sql_output_table": null,
+                "location": "europe-west1",
+                "dataset_id": "chicago_taxis",
+                "project_id": "avisia-certification-ml-yde"
+            }
+        },
+        "outputs": {
+            "parameters": {
+                "Output": {
+                    "outputFile": "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/local_outputs/forecasting-pipeline-2025-04-08-10-41-05-714349/run-bq-forecasting-query/Output"
+                }
+            },
+            "outputFile": "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/local_outputs/forecasting-pipeline-2025-04-08-10-41-05-714349/run-bq-forecasting-query/executor_output.json"
+        }
+    }
+    /private/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmp3o9g0p8u/lib/python3.12/site-packages/google/auth/_default.py:76: UserWarning: Your application has authenticated using end user credentials from Google Cloud SDK without a quota project. You might receive a "quota exceeded" or "API not enabled" error. See the following page for troubleshooting: https://cloud.google.com/docs/authentication/adc-troubleshooting/user-creds. 
+      warnings.warn(_CLOUD_SDK_CREDENTIALS_WARNING)
+    [KFP Executor 2025-04-08 10:41:36,188 INFO]: Wrote executor output file to /Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/local_outputs/forecasting-pipeline-2025-04-08-10-41-05-714349/run-bq-forecasting-query/executor_output.json.
+    
+
+10:41:37.074 - INFO - Task [96m'run-bq-forecasting-query'[0m finished with status [92mSUCCESS[0m
+10:41:37.075 - INFO - Task [96m'run-bq-forecasting-query'[0m outputs:
+    Output: 'avisia-certification-ml-yde.chicago_taxis.demand_by_hour'
+--------------------------------------------------------------------------------
+10:41:37.079 - INFO - Executing task [96m'create-timeseries-dataset'[0m
+10:41:37.079 - INFO - Streamed logs:
+
+    ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+    kfp 2.10.1 requires click<9,>=8.0.0, which is not installed.
+    kfp 2.10.1 requires kfp-pipeline-spec==0.5.0, which is not installed.
+    kfp 2.10.1 requires kfp-server-api<2.4.0,>=2.1.0, which is not installed.
+    kfp 2.10.1 requires kubernetes<31,>=8.0.0, which is not installed.
+    kfp 2.10.1 requires PyYAML<7,>=5.3, which is not installed.
+    kfp 2.10.1 requires requests-toolbelt<1,>=0.8.0, which is not installed.
+    kfp 2.10.1 requires tabulate<1,>=0.8.6, which is not installed.
+    kfp 2.10.1 requires protobuf<5,>=4.21.1, but you have protobuf 5.29.4 which is incompatible.
+    kfp 2.10.1 requires urllib3<2.0.0, but you have urllib3 2.3.0 which is incompatible.
+    
+    [notice] A new release of pip is available: 24.3.1 -> 25.0.1
+    [notice] To update, run: /private/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmph0t_ql_0/bin/python -m pip install --upgrade pip
+    [KFP Executor 2025-04-08 10:42:21,616 INFO]: Looking for component `create_timeseries_dataset` in --component_module_path `/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmp.xo2fEjG0Vy/ephemeral_component.py`
+    [KFP Executor 2025-04-08 10:42:21,617 INFO]: Loading KFP component "create_timeseries_dataset" from /var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmp.xo2fEjG0Vy/ephemeral_component.py (directory "/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmp.xo2fEjG0Vy" and module name "ephemeral_component")
+    [KFP Executor 2025-04-08 10:42:21,618 INFO]: Got executor_input:
+    {
+        "inputs": {
+            "parameterValues": {
+                "display_name": "chicago_taxi_forecast_model-dataset",
+                "bq_source_uri": "bq://avisia-certification-ml-yde.chicago_taxis.demand_by_hour",
+                "location": "europe-west1",
+                "project": "avisia-certification-ml-yde"
+            }
+        },
+        "outputs": {
+            "artifacts": {
+                "dataset_resource_name": {
+                    "artifacts": [
+                        {
+                            "name": "dataset_resource_name",
+                            "type": {
+                                "schemaTitle": "system.Artifact",
+                                "schemaVersion": "0.0.1"
+                            },
+                            "uri": "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/local_outputs/forecasting-pipeline-2025-04-08-10-41-05-714349/create-timeseries-dataset/dataset_resource_name",
+                            "metadata": {}
+                        }
+                    ]
+                }
+            },
+            "outputFile": "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/local_outputs/forecasting-pipeline-2025-04-08-10-41-05-714349/create-timeseries-dataset/executor_output.json"
+        }
+    }
+    /private/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmph0t_ql_0/lib/python3.12/site-packages/google/auth/_default.py:76: UserWarning: Your application has authenticated using end user credentials from Google Cloud SDK without a quota project. You might receive a "quota exceeded" or "API not enabled" error. See the following page for troubleshooting: https://cloud.google.com/docs/authentication/adc-troubleshooting/user-creds. 
+      warnings.warn(_CLOUD_SDK_CREDENTIALS_WARNING)
+    Traceback (most recent call last):
+      File "<frozen runpy>", line 198, in _run_module_as_main
+      File "<frozen runpy>", line 88, in _run_code
+      File "/private/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmph0t_ql_0/lib/python3.12/site-packages/kfp/dsl/executor_main.py", line 109, in <module>
+        executor_main()
+      File "/private/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmph0t_ql_0/lib/python3.12/site-packages/kfp/dsl/executor_main.py", line 101, in executor_main
+        output_file = executor.execute()
+                      ^^^^^^^^^^^^^^^^^^
+      File "/private/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmph0t_ql_0/lib/python3.12/site-packages/kfp/dsl/executor.py", line 361, in execute
+        result = self.func(**func_kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/var/folders/yz/8n0rd9yn0hz34drfl1h86v300000gn/T/tmp.xo2fEjG0Vy/ephemeral_component.py", line 26, in create_timeseries_dataset
+        dataset_resource_name.path.open("w").write(dataset.resource_name)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    AttributeError: 'str' object has no attribute 'open'
+    
+
+10:42:36.259 - ERROR - Task [96m'create-timeseries-dataset'[0m finished with status [91mFAILURE[0m
+--------------------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/run_pipeline.py", line 32, in <module>
+    job = forecasting_pipeline(
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/venv/lib/python3.12/site-packages/kfp/dsl/base_component.py", line 101, in __call__
+    return pipeline_task.PipelineTask(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/venv/lib/python3.12/site-packages/kfp/dsl/pipeline_task.py", line 185, in __init__
+    self._execute_locally(args=args)
+  File "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/venv/lib/python3.12/site-packages/kfp/dsl/pipeline_task.py", line 195, in _execute_locally
+    self._outputs = pipeline_orchestrator.run_local_pipeline(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/venv/lib/python3.12/site-packages/kfp/local/pipeline_orchestrator.py", line 43, in run_local_pipeline
+    return _run_local_pipeline_implementation(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/venv/lib/python3.12/site-packages/kfp/local/pipeline_orchestrator.py", line 108, in _run_local_pipeline_implementation
+    log_and_maybe_raise_for_failure(
+  File "/Users/gustavevernay/Desktop/Projets/Pro/Avisia/chicago-taxi-genai-demo/venv/lib/python3.12/site-packages/kfp/local/pipeline_orchestrator.py", line 137, in log_and_maybe_raise_for_failure
+    raise RuntimeError(msg)
+RuntimeError: Pipeline 'forecasting-pipeline' finished with status FAILURE. Inner task failed: 'create-timeseries-dataset'.

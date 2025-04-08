@@ -33,7 +33,7 @@ def run_bq_forecasting_query(
         SELECT
           MIN(TIMESTAMP_TRUNC(trip_start_timestamp, HOUR)) AS min_hour,
           MAX(TIMESTAMP_TRUNC(trip_start_timestamp, HOUR)) AS max_hour
-        FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+        FROM `{project_id}.{dataset_id}.taxi_trips`
       ),
       all_hours AS (
         SELECT timestamp_hour
@@ -42,7 +42,7 @@ def run_bq_forecasting_query(
       ),
       areas AS (
         SELECT DISTINCT pickup_community_area
-        FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+        FROM `{project_id}.{dataset_id}.taxi_trips`
         WHERE pickup_community_area IS NOT NULL
       ),
       all_combinations AS (
@@ -57,7 +57,7 @@ def run_bq_forecasting_query(
           TIMESTAMP_TRUNC(trip_start_timestamp, HOUR) AS timestamp_hour,
           pickup_community_area,
           COUNT(*) AS trip_count
-        FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+        FROM `{project_id}.{dataset_id}.taxi_trips`
         WHERE pickup_community_area IS NOT NULL
         GROUP BY 1, 2
       ),

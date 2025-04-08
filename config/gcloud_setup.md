@@ -40,7 +40,7 @@ Create a GCS bucket to store pipeline artifacts, model assets, and potentially d
 ```bash
 # Choose a globally unique bucket name (often PROJECT_ID suffixed)
 export BUCKET_NAME="${PROJECT_ID}-vertex-bucket"
-export REGION="us-central1" # Or your preferred region
+export REGION="europe-west1" # Or your preferred region
 
 # Create the bucket in the specified region
 gsutil mb -p ${PROJECT_ID} -l ${REGION} gs://${BUCKET_NAME}

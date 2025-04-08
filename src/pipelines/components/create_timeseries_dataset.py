@@ -24,6 +24,7 @@ def create_timeseries_dataset(
     )
 
     # Stocke le nom du dataset dans un fichier pour qu'il soit disponible pour les étapes suivantes
-    dataset_resource_name.path.open("w").write(dataset.resource_name)
+    with open(dataset_resource_name.path, "w") as f:
+        f.write(dataset.resource_name)
 
     print(f"✅ Dataset créé : {dataset.resource_name}")

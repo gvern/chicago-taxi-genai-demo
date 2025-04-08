@@ -1,8 +1,8 @@
 from kfp import dsl
 
-from src.pipelines.components.run_bq_forecasting_query import run_bq_forecasting_query
-from src.pipelines.components.create_timeseries_dataset import create_timeseries_dataset
-from src.pipelines.components.train_forecasting_model import train_forecasting_model
+from .components.run_bq_forecasting_query import run_bq_forecasting_query
+from .components.create_timeseries_dataset import create_timeseries_dataset
+from .components.train_forecasting_model import train_forecasting_model
 
 
 @dsl.pipeline(
