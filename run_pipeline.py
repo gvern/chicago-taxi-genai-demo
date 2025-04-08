@@ -52,7 +52,8 @@ job = forecasting_pipeline(
     optimization_objective=config["vertex_ai_forecast"]["optimization_objective"],
     available_at_forecast_columns=config["forecasting"]["available_at_forecast"],
     unavailable_at_forecast_columns=config["forecasting"]["unavailable_at_forecast"],
-    budget_milli_node_hours=config["vertex_ai_forecast"]["budget_milli_node_hours"]
+    budget_milli_node_hours=config["vertex_ai_forecast"]["budget_milli_node_hours"],
+    column_transformations=config["vertex_ai_forecast"]["column_transformations"]
 )
 
 job.run(sync=True)

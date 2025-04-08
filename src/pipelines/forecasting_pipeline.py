@@ -1,4 +1,5 @@
 from kfp import dsl
+from typing import Dict
 
 from .components.run_bq_forecasting_query import run_bq_forecasting_query
 from .components.create_timeseries_dataset import create_timeseries_dataset
@@ -27,6 +28,7 @@ def forecasting_pipeline(
     available_at_forecast_columns: list = [],
     unavailable_at_forecast_columns: list = [],
     budget_milli_node_hours: int = 1000,
+    column_transformations: Dict[str, str] = None,
 ):
     # Étape 1 : Générer la table BigQuery finale
     query_job = run_bq_forecasting_query(
@@ -58,5 +60,6 @@ def forecasting_pipeline(
         optimization_objective=optimization_objective,
         available_at_forecast_columns=available_at_forecast_columns,
         unavailable_at_forecast_columns=unavailable_at_forecast_columns,
-        budget_milli_node_hours=budget_milli_node_hours
+        budget_milli_node_hours=budget_milli_node_hours,
+        column_transformations=column_transformations
     ).after(dataset_creation)

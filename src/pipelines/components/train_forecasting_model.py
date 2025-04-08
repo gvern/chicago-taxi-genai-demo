@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 from kfp.dsl import component, Input, Output, Artifact
 
 @component(
@@ -21,6 +21,7 @@ def train_forecasting_model(
     available_at_forecast_columns: List[str] = [],
     unavailable_at_forecast_columns: List[str] = [],
     budget_milli_node_hours: int = 1000,
+    column_transformations: Dict[str, str] = None,
     model_resource_name: Output[Artifact] = None
 ):
     """
@@ -44,8 +45,19 @@ def train_forecasting_model(
         optimization_objective=optimization_objective
     )
 
+    # Préparer les transformations de colonnes
+    transformations = {}
+    if column_transformations:
+        for col, transform_type in column_transformations.items():
+            if transform_type == "numeric":
+                transformations[col] = {"numeric": {}}
+            elif transform_type == "categorical":
+                transformations[col] = {"categorical": {}}
+            elif transform_type == "timestamp":
+                transformations[col] = {"timestamp": {}}
+
     model = job.run(
-        dataset=dataset,  # Utiliser l'objet TimeSeriesDataset
+        dataset=dataset,
         target_column=target_column,
         time_column=time_column,
         time_series_identifier_column=time_series_identifier_column,
@@ -56,7 +68,8 @@ def train_forecasting_model(
         forecast_horizon=forecast_horizon,
         context_window=context_window,
         budget_milli_node_hours=budget_milli_node_hours,
-        model_display_name=f"{display_name}_model"
+        model_display_name=f"{display_name}_model",
+        column_transformations=transformations
     )
 
     # Écrire le nom du modèle dans le fichier d'artefact
