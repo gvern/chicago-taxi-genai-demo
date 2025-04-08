@@ -30,8 +30,18 @@ forecasting:
   time_granularity: "hour"
   forecast_horizon: 24
   window_size: 168              # Taille du contexte historique utilisé
-  available_at_forecast: []     # Ex: météo future
-  unavailable_at_forecast:      # Connues seulement dans le passé
+  available_at_forecast:        # Toutes ces colonnes sont connues à l'avance (calculables pour l'avenir)
+    - timestamp_hour
+    - day_of_year
+    - day_of_week
+    - hour
+    - month
+    - is_weekend
+    - temperature
+    - precipitation
+    - wind_speed
+
+  unavailable_at_forecast:      # Connue uniquement dans le passé
     - trip_count
   data_granularity_unit: hour
 
