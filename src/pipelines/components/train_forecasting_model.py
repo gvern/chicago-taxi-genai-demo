@@ -42,19 +42,17 @@ def train_forecasting_model(
 
     job = aiplatform.AutoMLForecastingTrainingJob(
         display_name=display_name,
-        optimization_objective=optimization_objective
+        optimization_objective=optimization_objective,
+        column_transformations=[
+            {"numeric": {"column_name": "trip_count"}},
+            {"numeric": {"column_name": "day_of_year"}},
+            {"categorical": {"column_name": "day_of_week"}},
+            {"timestamp": {"column_name": "timestamp_hour"}},
+        ],
     )
 
-    # Préparer les transformations de colonnes
-    transformations = {}
-    if column_transformations:
-        for col, transform_type in column_transformations.items():
-            if transform_type == "numeric":
-                transformations[col] = {"numeric": {}}
-            elif transform_type == "categorical":
-                transformations[col] = {"categorical": {}}
-            elif transform_type == "timestamp":
-                transformations[col] = {"timestamp": {}}
+
+
 
     model = job.run(
         dataset=dataset,
@@ -68,8 +66,7 @@ def train_forecasting_model(
         forecast_horizon=forecast_horizon,
         context_window=context_window,
         budget_milli_node_hours=budget_milli_node_hours,
-        model_display_name=f"{display_name}_model",
-        column_transformations=transformations
+        model_display_name=f"{display_name}_model"
     )
 
     # Écrire le nom du modèle dans le fichier d'artefact
