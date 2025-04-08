@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 from kfp import local
 from kfp import dsl
 from google.cloud import aiplatform
-from pipelines.forecasting_pipeline import forecasting_pipeline
+from src.pipelines.forecasting_pipeline import forecasting_pipeline
 from kfp.local import init  # Import the local initialization function
 # Initialize the local environment with a valid runner
 local.init(runner=local.SubprocessRunner())
@@ -19,7 +19,7 @@ with open("config/pipeline_config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 # === 2. Paramètres GCP / Pipeline ===
-PROJECT_ID = "avisia-certification-ml-yde"
+PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "avisia-certification-ml-yde")
 REGION = "europe-west1"
 
 PIPELINE_ROOT = f"gs://{PROJECT_ID}-vertex-bucket/pipeline_artifacts"

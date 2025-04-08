@@ -55,10 +55,10 @@ Create a BigQuery dataset to store the processed taxi demand data.
 # Choose a dataset name
 export BQ_DATASET="chicago_taxis"
 
-# Create the dataset in the specified region (e.g., US multi-region)
-bq mk --location=US --dataset ${PROJECT_ID}:${BQ_DATASET}
+# Create the dataset in the specified region (europe-west1)
+bq mk --location=europe-west1 --dataset ${PROJECT_ID}:${BQ_DATASET}
 ```
-*   The processed table `demand_by_hour` will reside in `${PROJECT_ID}:${BQ_DATASET}`.
+*   The processed table `demand_by_hour` will reside in `${PROJECT_ID}:${BQ_DATASET}` in the europe-west1 region.
 
 ## 5. Service Account (Optional but Recommended)
 
@@ -109,7 +109,7 @@ Create a `.env` file with the following variables:
 PROJECT_ID=chicago-taxi-analysis
 BUCKET_NAME=${PROJECT_ID}-data
 DATASET_NAME=chicago_taxi_data
-REGION=us-central1
+REGION=europe-west1
 ```
 
 ## Security Considerations
