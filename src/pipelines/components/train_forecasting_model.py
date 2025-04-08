@@ -36,13 +36,16 @@ def train_forecasting_model(
     
     print(f"📊 Utilisation du dataset : {dataset_name}")
 
+    # Créer l'objet TimeSeriesDataset
+    dataset = aiplatform.TimeSeriesDataset(dataset_name)
+
     job = aiplatform.AutoMLForecastingTrainingJob(
         display_name=display_name,
         optimization_objective=optimization_objective
     )
 
     model = job.run(
-        dataset=dataset_name,  # Utiliser le nom du dataset lu depuis le fichier
+        dataset=dataset,  # Utiliser l'objet TimeSeriesDataset
         target_column=target_column,
         time_column=time_column,
         time_series_identifier_column=time_series_identifier_column,
