@@ -2,6 +2,9 @@
 data/
 data/*
 
+# KFP local outputs
+local_outputs/
+
 # Python
 __pycache__/
 *.py[cod]
