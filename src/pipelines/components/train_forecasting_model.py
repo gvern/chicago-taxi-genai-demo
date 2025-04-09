@@ -40,19 +40,25 @@ def train_forecasting_model(
     # Créer l'objet TimeSeriesDataset
     dataset = aiplatform.TimeSeriesDataset(dataset_name)
 
-    job = aiplatform.AutoMLForecastingTrainingJob(
-        display_name=display_name,
-        optimization_objective=optimization_objective,
-        column_transformations=[
+    # Préparer les transformations de colonnes
+    formatted_transformations = []
+    if column_transformations:
+        for column_name, transform_type in column_transformations.items():
+            formatted_transformations.append({transform_type: {"column_name": column_name}})
+    else:
+        # Utiliser les transformations par défaut si non spécifiées
+        formatted_transformations = [
             {"numeric": {"column_name": "trip_count"}},
             {"numeric": {"column_name": "day_of_year"}},
             {"categorical": {"column_name": "day_of_week"}},
             {"timestamp": {"column_name": "timestamp_hour"}},
-        ],
+        ]
+
+    job = aiplatform.AutoMLForecastingTrainingJob(
+        display_name=display_name,
+        optimization_objective=optimization_objective,
+        column_transformations=formatted_transformations,
     )
-
-
-
 
     model = job.run(
         dataset=dataset,

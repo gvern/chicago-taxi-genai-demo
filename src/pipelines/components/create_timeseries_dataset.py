@@ -1,5 +1,4 @@
 from kfp.dsl import component, Output, Artifact
-from google.cloud import aiplatform
 
 @component(
     base_image="python:3.10",
@@ -15,7 +14,7 @@ def create_timeseries_dataset(
     """
     Crée un Vertex AI TimeSeriesDataset à partir d'une table BigQuery.
     """
-    from google.cloud import aiplatform 
+    from google.cloud import aiplatform
     aiplatform.init(project=project, location=location)
 
     dataset = aiplatform.TimeSeriesDataset.create(

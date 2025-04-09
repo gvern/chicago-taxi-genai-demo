@@ -17,13 +17,27 @@ def create_demand_table(project_id: str, dataset_id: str, table_id: str) -> str:
 
     CREATE OR REPLACE TABLE `{project_id}.{dataset_id}.{table_id}` AS
     SELECT
-      TIMESTAMP_TRUNC(trip_start_timestamp, HOUR) AS timestamp_hour,
+      TIMESTAMP_TRUNC(pickup_datetime, HOUR) AS timestamp_hour,
       pickup_community_area,
-      COUNT(*) AS trip_count
-    FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
-    WHERE pickup_community_area IS NOT NULL
-    GROUP BY timestamp_hour, pickup_community_area
-    ORDER BY timestamp_hour, pickup_community_area;
+      COUNT(trip_id) AS trip_count,
+      EXTRACT(HOUR FROM pickup_datetime) AS hour,
+      EXTRACT(DAYOFWEEK FROM pickup_datetime) AS day_of_week,
+      EXTRACT(MONTH FROM pickup_datetime) AS month,
+      EXTRACT(DAYOFYEAR FROM pickup_datetime) AS day_of_year,
+      IF(EXTRACT(DAYOFWEEK FROM pickup_datetime) IN (1,7), 1, 0) AS is_weekend,
+      AVG(temperature) AS temperature,
+      AVG(precipitation) AS precipitation,
+      AVG(wind_speed) AS wind_speed
+    FROM
+      `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+    WHERE
+      pickup_datetime BETWEEN TIMESTAMP("2013-01-01") AND TIMESTAMP("2023-11-22")
+      AND pickup_community_area IS NOT NULL
+    GROUP BY
+      timestamp_hour, pickup_community_area
+    HAVING 
+      COUNT(trip_id) > 0
+    ;
     """
 
     job = client.query(query)
