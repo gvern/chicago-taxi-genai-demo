@@ -5,6 +5,7 @@ from src.pipelines.forecasting_pipeline import forecasting_pipeline
 import yaml
 import os
 import sys
+from datetime import datetime, timedelta
 
 # Ajouter le répertoire src au PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
@@ -30,7 +31,23 @@ BQ_URI = f"bq://{PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE}"
 # Nom du job
 PIPELINE_NAME = "chicago-taxi-forecasting"
 
-# === 3. Lancer le pipeline ===
+# === 3. Configurer la plage de dates pour limiter la taille des séries temporelles ===
+# Récupérer les dates du fichier de configuration ou utiliser des valeurs par défaut
+if "time_window" in config.get("forecasting", {}):
+    START_DATE = config["forecasting"]["time_window"].get("start_date", "2021-01-01")
+    END_DATE = config["forecasting"]["time_window"].get("end_date", "2023-11-22")
+else:
+    # Utiliser les 3 dernières années de données par défaut
+    END_DATE = "2023-11-22"  # Date fixe pour la fin des données
+    # Calculer une date de début qui donne environ 2900 points (heures) - marge de sécurité
+    end_date_obj = datetime.strptime(END_DATE, "%Y-%m-%d")
+    start_date_obj = end_date_obj - timedelta(hours=2900)
+    START_DATE = start_date_obj.strftime("%Y-%m-%d")
+
+print(f"Période d'entraînement: {START_DATE} à {END_DATE}")
+print(f"Note: La limite de Vertex AI est de 3000 points par série temporelle")
+
+# === 4. Lancer le pipeline ===
 aiplatform.init(project=PROJECT_ID, location=REGION, staging_bucket=PIPELINE_ROOT)
 
 job = forecasting_pipeline(
@@ -51,7 +68,10 @@ job = forecasting_pipeline(
     available_at_forecast_columns=config["forecasting"]["available_at_forecast"],
     unavailable_at_forecast_columns=config["forecasting"]["unavailable_at_forecast"],
     budget_milli_node_hours=config["vertex_ai_forecast"]["budget_milli_node_hours"],
-    column_transformations=config["vertex_ai_forecast"]["column_transformations"]
+    column_transformations=config["vertex_ai_forecast"]["column_transformations"],
+    # Nouveaux paramètres de plage de dates
+    start_date=START_DATE,
+    end_date=END_DATE
 )
 
 job.run(sync=True)

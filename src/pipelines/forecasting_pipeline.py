@@ -29,11 +29,15 @@ def forecasting_pipeline(
     unavailable_at_forecast_columns: list = [],
     budget_milli_node_hours: int = 1000,
     column_transformations: Dict[str, str] = None,
+    start_date: str = "2021-01-01",  # Paramètre pour limiter la taille des séries temporelles
+    end_date: str = "2023-11-22"     # Paramètre pour limiter la taille des séries temporelles
 ):
     # Étape 1 : Générer la table BigQuery finale
     query_job = run_bq_forecasting_query(
         project_id=project,
-        location=location
+        location=location,
+        start_date=start_date,
+        end_date=end_date
     )
 
     # Étape 2 : Créer le dataset TimeSeries dans Vertex AI
