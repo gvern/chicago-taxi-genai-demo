@@ -2,6 +2,9 @@
 data/
 data/*
 
+#Archives
+/archives/
+
 # KFP local outputs
 local_outputs/
 

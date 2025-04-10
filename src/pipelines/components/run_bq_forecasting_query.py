@@ -1,6 +1,5 @@
 from typing import Optional
 from kfp.dsl import component
-from google.cloud import bigquery
 
 @component(
     packages_to_install=["google-cloud-bigquery"],
@@ -26,64 +25,58 @@ def run_bq_forecasting_query(
     query = f"""
     -- Génère la table forecasting avec toutes les heures et zones
     CREATE SCHEMA IF NOT EXISTS `{project_id}.{dataset_id}` OPTIONS(location="{location}");
-
+    
     CREATE OR REPLACE TABLE `{table_uri}` AS
     WITH
       hours AS (
-        SELECT
-          MIN(TIMESTAMP_TRUNC(trip_start_timestamp, HOUR)) AS min_hour,
-          MAX(TIMESTAMP_TRUNC(trip_start_timestamp, HOUR)) AS max_hour
-        FROM `{project_id}.{dataset_id}.taxi_trips`
-      ),
-      all_hours AS (
-        SELECT timestamp_hour
-        FROM hours,
-        UNNEST(GENERATE_TIMESTAMP_ARRAY(min_hour, max_hour, INTERVAL 1 HOUR)) AS timestamp_hour
+        SELECT ts AS timestamp_hour
+        FROM UNNEST(GENERATE_TIMESTAMP_ARRAY(
+          TIMESTAMP("2013-01-01 00:00:00"),
+          TIMESTAMP("2023-11-22 09:00:00"),
+          INTERVAL 1 HOUR)) AS ts
       ),
       areas AS (
         SELECT DISTINCT pickup_community_area
         FROM `{project_id}.{dataset_id}.taxi_trips`
         WHERE pickup_community_area IS NOT NULL
       ),
-      all_combinations AS (
-        SELECT
-          h.timestamp_hour,
-          a.pickup_community_area
-        FROM all_hours h
-        CROSS JOIN areas a
+      hourly_grid AS (
+        SELECT timestamp_hour, pickup_community_area
+        FROM hours CROSS JOIN areas
       ),
-      aggregated AS (
+      trip_counts AS (
         SELECT
           TIMESTAMP_TRUNC(trip_start_timestamp, HOUR) AS timestamp_hour,
           pickup_community_area,
-          COUNT(*) AS trip_count
-        FROM `{project_id}.{dataset_id}.taxi_trips`
-        WHERE pickup_community_area IS NOT NULL
-        GROUP BY 1, 2
-      ),
-      filled AS (
-        SELECT
-          ac.timestamp_hour,
-          ac.pickup_community_area,
-          IFNULL(agg.trip_count, 0) AS trip_count
-        FROM all_combinations ac
-        LEFT JOIN aggregated agg
-          ON ac.timestamp_hour = agg.timestamp_hour
-         AND ac.pickup_community_area = agg.pickup_community_area
+          COUNT(unique_key) AS trip_count,
+          AVG(NULLIF(weather.temperature,0)) AS temperature,
+          AVG(NULLIF(weather.precipitation,0)) AS precipitation,
+          AVG(NULLIF(weather.wind_speed,0)) AS wind_speed
+        FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips` AS trips
+        LEFT JOIN `bigquery-public-data.chicago_taxi_trips.taxi_weather` AS weather
+          ON DATE(trips.trip_start_timestamp) = weather.date
+        WHERE
+          trip_start_timestamp BETWEEN TIMESTAMP("2013-01-01") AND TIMESTAMP("2023-11-22")
+          AND pickup_community_area IS NOT NULL
+        GROUP BY timestamp_hour, pickup_community_area
       )
     SELECT
-      timestamp_hour,
-      pickup_community_area,
-      trip_count,
-      EXTRACT(HOUR FROM timestamp_hour) AS hour,
-      EXTRACT(DAYOFWEEK FROM timestamp_hour) AS day_of_week,
-      EXTRACT(MONTH FROM timestamp_hour) AS month,
-      EXTRACT(YEAR FROM timestamp_hour) AS year,
-      EXTRACT(DAYOFYEAR FROM timestamp_hour) AS day_of_year,
-      IF(EXTRACT(DAYOFWEEK FROM timestamp_hour) IN (1, 7), 1, 0) AS is_weekend,
-      IF(FORMAT_DATE('%m-%d', DATE(timestamp_hour)) IN ('01-01','07-04','12-25'), 1, 0) AS is_holiday
-    FROM filled
-    ORDER BY timestamp_hour, pickup_community_area;
+      grid.timestamp_hour,
+      grid.pickup_community_area,
+      IFNULL(tc.trip_count, 0) AS trip_count,
+      EXTRACT(HOUR FROM grid.timestamp_hour) AS hour,
+      EXTRACT(DAYOFWEEK FROM grid.timestamp_hour) AS day_of_week,
+      EXTRACT(MONTH FROM grid.timestamp_hour) AS month,
+      EXTRACT(DAYOFYEAR FROM grid.timestamp_hour) AS day_of_year,
+      IF(EXTRACT(DAYOFWEEK FROM grid.timestamp_hour) IN (1,7), 1, 0) AS is_weekend,
+      tc.temperature,
+      tc.precipitation,
+      tc.wind_speed
+    FROM hourly_grid AS grid
+    LEFT JOIN trip_counts AS tc
+      ON grid.timestamp_hour = tc.timestamp_hour
+      AND grid.pickup_community_area = tc.pickup_community_area
+    ORDER BY timestamp_hour ASC
     """
 
     job = client.query(query)
