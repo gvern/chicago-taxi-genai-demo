@@ -1,26 +1,15 @@
 # ML Pipeline Configuration - Forecasting with Vertex AI
 
-# Data Processing Parameters
-data_processing:
-  sample_size: 1000000         # Optionnel pour les tests locaux
-  random_seed: 42
-  train_test_split: 0.8        # Peut être ignoré si Vertex AI gère les splits
-  validation_split: 0.1
+gcp:
+  project_id: "avisia-certification-ml-yde"
+  region: "europe-west1"
+  dataset_id: "chicago_taxi_data"
 
-# Feature Engineering
-feature_engineering:
-  temporal_features:
-    - hour
-    - day_of_week
-    - month
-    - day_of_year
-    - is_weekend
-  spatial_features:
-    - pickup_community_area
-  exogenous_features:
-    - temperature
-    - precipitation
-    - wind_speed
+
+bigquery:
+  dataset_id: "chicago_taxis"
+  # La table source sera celle préparée par le Notebook 1
+  source_table_id: "demand_by_hour" # Nom de la table finale préparée
 
 # Forecasting Configuration
 forecasting:
@@ -37,20 +26,20 @@ forecasting:
     - hour
     - month
     - is_weekend
-    - is_holiday
-    - temperature
-    - precipitation
-    - wind_speed
-
+    - hour_sin
+    - hour_cos
+    - year
   unavailable_at_forecast:      # Connue uniquement dans le passé
     - trip_count
-  data_granularity_unit: hour
+  time_window:
+    end_date: "2023-11-22" # Date de fin souhaitée pour les données d'entraînement/test
+    max_data_points: 2950 
 
 # Vertex AI Forecast Model Parameters
 vertex_ai_forecast:
   display_name: "chicago_taxi_forecast_model"
   optimization_objective: "minimize-rmse"
-  budget_milli_node_hours: 1000    # ~1h d'entraînement
+  budget_milli_node_hours: 8000    # ~1h d'entraînement
   column_transformations:
     timestamp_hour: "timestamp"
     pickup_community_area: "categorical"
@@ -60,9 +49,28 @@ vertex_ai_forecast:
     month: "categorical"
     day_of_year: "numeric"
     is_weekend: "categorical"
-    temperature: "numeric"
-    precipitation: "numeric"
-    wind_speed: "numeric"
+    hour_sin: "numeric"
+    hour_cos: "numeric"
+    year: "numeric"
+
+
+  hyperparameters:
+    learning_rate: 0.01
+    batch_size: 32
+    num_epochs: 50
+    early_stopping: true
+    patience: 5
+    dropout_rate: 0.2
+  model_type: "ARIMA"           # Choix du modèle
+  model_selection:
+    - "AutoML"
+    - "XGBoost"
+    - "ARIMA"
+    - "Prophet"
+  model_selection_criteria: "rmse" # Critère de sélection du modèle
+  model_selection_timeout: 3600   # Timeout pour la sélection du modèle
+  model_selection_max_trials: 10  # Nombre maximum d'essais pour la sélection du modèle
+  model_selection_max_parallel_trials: 2 # Nombre maximum d'essais parallèles
 
   predefined_split_column_name: null
   time_column: "timestamp_hour"
