@@ -7,9 +7,11 @@ gcp:
 
 
 bigquery:
-  dataset_id: "chicago_taxis"
-  # La table source sera celle préparée par le Notebook 1
-  source_table_id: "demand_by_hour" # Nom de la table finale préparée
+  dataset_id: "chicago_taxis" # Dataset for pipeline outputs (training table, prediction input/output)
+  source_table_id: "bigquery-public-data.chicago_taxi_trips.taxi_trips" # Source for raw data (used by SQL query)
+  training_table_name: "demand_by_hour" # Name for the generated training table
+  prediction_input_table_name: "forecast_input" # Name for the generated prediction input table
+  prediction_output_prefix: "forecast_output" # Prefix for batch prediction output table
 
 # Forecasting Configuration
 forecasting:
@@ -29,12 +31,17 @@ forecasting:
     - hour_sin
     - hour_cos
     - year
+    - pickup_community_area
   unavailable_at_forecast:      # Connue uniquement dans le passé
     - trip_count
   time_window:
     end_date: "2023-11-22" # Date de fin souhaitée pour les données d'entraînement/test
     max_data_points: 2950 
-
+data_preprocessing:
+  sql_template_path: "src/data_preprocessing/bigquery_queries.sql"
+  time_window:
+    end_date_str: "2023-11-22" # End date for training data generation
+    max_data_points: 2950 # Max number of hours per series for training data
 # Vertex AI Forecast Model Parameters
 vertex_ai_forecast:
   display_name: "chicago_taxi_forecast_model"
