@@ -1,69 +1,130 @@
+# src/pipelines/forecasting_pipeline.py
+
 from kfp import dsl
-from typing import Dict
+from kfp.dsl import Input, Output, Artifact, Model, Metrics # Import specific types
+from kfp.v2.dsl import component, Output, Dataset, Model
+from typing import Dict, List, NamedTuple
+import yaml
 
-from .components.run_bq_forecasting_query import run_bq_forecasting_query
-from .components.create_timeseries_dataset import create_timeseries_dataset
-from .components.train_forecasting_model import train_forecasting_model
+# Remplacer le chargement direct du YAML par l'import du setup
+from src.pipelines.components.setup.setup import get_config
 
+config = get_config()
+
+# Import des composants
+from src.pipelines.components.data_preparation.run_bq_forecasting_query import run_bq_forecasting_query
+from src.pipelines.components.model_training.launch_hpt_job import launch_hpt_job
+from src.pipelines.components.generate_forecasting_data.generate_forecast_input import generate_forecast_input
+from src.pipelines.components.predictions.batch_predict_xgboost import batch_predict_xgboost
+from src.pipelines.components.evaluation.evaluate_visualize_predictions import evaluate_visualize_predictions
 
 @dsl.pipeline(
-    name="forecasting-pipeline",
-    description="Pipeline complet de forecasting taxi demand - Chicago"
+    name="custom-forecasting-hpt-pipeline",
+    description="Pipeline de forecasting avec entraînement personnalisé et HPT"
 )
-def forecasting_pipeline(
-    project: str,
-    location: str,
-    bq_query: str,
-    bq_output_uri: str,
-    dataset_display_name: str,
-    forecast_model_display_name: str,
-    target_column: str,
-    time_column: str,
-    time_series_identifier_column: str,
-    forecast_horizon: int,
-    context_window: int,
-    data_granularity_unit: str = "hour",
-    data_granularity_count: int = 1,
-    optimization_objective: str = "minimize-rmse",
-    available_at_forecast_columns: list = [],
-    unavailable_at_forecast_columns: list = [],
-    budget_milli_node_hours: int = 1000,
-    column_transformations: Dict[str, str] = None,
-    start_date: str = "2021-01-01",  # Paramètre pour limiter la taille des séries temporelles
-    end_date: str = "2023-11-22"     # Paramètre pour limiter la taille des séries temporelles
-):
-    # Étape 1 : Générer la table BigQuery finale
-    query_job = run_bq_forecasting_query(
+def forecasting_pipeline():
+    # Use config values
+    project = config["project"]
+    location = config["location"]
+    staging_bucket = config["staging_bucket"]
+    bq_dataset_id = config["bq_dataset_id"]
+    source_table = config["source_table_id"]
+    train_table_name = config["train_table_name"]
+    sql_template_path = config["sql_template_path"]
+    end_date_str = config["end_date_str"]
+    max_data_points = config["max_data_points"]
+    time_column = config["time_column"]
+    target_column = config["target_column"]
+    series_id_column = config["series_id_column"]
+    feature_columns = config["feature_columns"]
+    train_ratio = config["train_ratio"]
+    hpt_display_name_prefix = config["hpt_display_name_prefix"]
+    hpt_metric_tag = config["hpt_metric_tag"]
+    hpt_metric_goal = config["hpt_metric_goal"]
+    hpt_max_trial_count = config["hpt_max_trial_count"]
+    hpt_parallel_trial_count = config["hpt_parallel_trial_count"]
+    hpt_search_algorithm = config["hpt_search_algorithm"]
+    hpt_parameter_spec = config["hpt_parameter_spec"]
+    worker_machine_type = config["worker_machine_type"]
+    worker_container_uri = config["worker_container_uri"]
+    forecast_horizon_hours = config["forecast_horizon_hours"]
+    forecast_start_time = config["forecast_start_time"]
+    id_col = config["id_col"]
+    time_col = config["time_col"]
+
+    prepare_data_op = run_bq_forecasting_query(
         project_id=project,
         location=location,
-        start_date=start_date,
-        end_date=end_date
+        dataset_id=bq_dataset_id,
+        source_table=source_table,
+        destination_table_name=train_table_name,
+        sql_template_path=sql_template_path,
+        end_date_str=end_date_str,
+        max_data_points=max_data_points
     )
 
-    # Étape 2 : Créer le dataset TimeSeries dans Vertex AI
-    dataset_creation = create_timeseries_dataset(
-        project=project,
-        location=location,
-        display_name=dataset_display_name,
-        bq_source_uri=bq_output_uri
-    ).after(query_job)
+    hpt_full_config = {
+        "metric_tag": hpt_metric_tag,
+        "metric_goal": hpt_metric_goal,
+        "max_trial_count": hpt_max_trial_count,
+        "parallel_trial_count": hpt_parallel_trial_count,
+        "search_algorithm": hpt_search_algorithm,
+        "parameter_spec": hpt_parameter_spec
+    }
+    worker_full_spec = {
+        "machine_type": worker_machine_type,
+        "container_uri": worker_container_uri,
+    }
+    static_script_args = {
+        "time_column": time_column,
+        "target_column": target_column,
+        "series_id_column": series_id_column,
+        "feature_columns": feature_columns,
+        "train_ratio": str(train_ratio)
+    }
 
-    # Étape 3 : Entraîner le modèle Vertex AI Forecasting
-    train_model = train_forecasting_model(
+    launch_hpt_op = launch_hpt_job(
         project=project,
         location=location,
-        display_name=forecast_model_display_name,
-        dataset_resource_name=dataset_creation.outputs["dataset_resource_name"],
-        target_column=target_column,
-        time_column=time_column,
-        time_series_identifier_column=time_series_identifier_column,
-        forecast_horizon=forecast_horizon,
-        context_window=context_window,
-        data_granularity_unit=data_granularity_unit,
-        data_granularity_count=data_granularity_count,
-        optimization_objective=optimization_objective,
-        available_at_forecast_columns=available_at_forecast_columns,
-        unavailable_at_forecast_columns=unavailable_at_forecast_columns,
-        budget_milli_node_hours=budget_milli_node_hours,
-        column_transformations=column_transformations
-    ).after(dataset_creation)
+        staging_bucket=staging_bucket,
+        display_name_prefix=hpt_display_name_prefix,
+        worker_pool_spec=worker_full_spec,
+        hpt_config=hpt_full_config,
+        static_args=static_script_args,
+        training_data_uri=prepare_data_op.outputs["destination_table_uri"]
+    )
+    launch_hpt_op.after(prepare_data_op)
+
+    future_features_gcs_path = f"{staging_bucket}/future_features.csv"
+    generate_future_features_op = generate_forecast_input(
+        project_id=project,
+        bq_dataset=bq_dataset_id,
+        bq_table_prepared=train_table_name,
+        id_col=id_col,
+        time_col=time_col,
+        forecast_horizon_hours=forecast_horizon_hours,
+        forecast_start_time=forecast_start_time,
+        output_gcs_path=future_features_gcs_path,
+    )
+    generate_future_features_op.after(prepare_data_op)
+
+    model_gcs_path = launch_hpt_op.outputs["model_gcs_path"]
+    features_gcs_path = generate_future_features_op.outputs["future_features"]
+    output_gcs_path = f"{staging_bucket}/predictions.csv"
+
+    batch_predict_task = batch_predict_xgboost(
+        model_gcs_path=model_gcs_path,
+        features_gcs_path=features_gcs_path,
+        output_gcs_path=output_gcs_path,
+    )
+    batch_predict_task.after(launch_hpt_op, generate_future_features_op)
+
+    actuals_bq_table_uri = f"bq://{project}.{bq_dataset_id}.{train_table_name}"
+    eval_output_dir = f"{staging_bucket}/evaluation_output"
+
+    eval_step = evaluate_visualize_predictions(
+        predictions_gcs_path=batch_predict_task.outputs['output_gcs_path'],
+        actuals_bq_table_uri=actuals_bq_table_uri,
+        output_dir=eval_output_dir
+    )
+    eval_step.after(batch_predict_task)
