@@ -19,7 +19,10 @@ def _generate_forecast_input_impl(
     output_gcs_path: str
 ):
     client = bigquery.Client(project=project_id)
-    query_ids = f"SELECT DISTINCT {id_col} FROM `{project_id}.{bq_dataset}.{bq_table_prepared}` WHERE {id_col} IS NOT NULL"
+    query_ids = f"""SELECT DISTINCT {id_col} 
+        FROM `{project_id}.{bq_dataset}.{bq_table_prepared}` 
+        WHERE {id_col} IS NOT NULL
+        ORDER BY {id_col}"""
     print(f"Fetching distinct IDs with query: {query_ids}")
     ids_df = client.query(query_ids).to_dataframe()
     ids = ids_df[id_col].unique()
