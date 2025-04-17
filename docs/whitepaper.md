@@ -38,7 +38,7 @@ L’objectif métier principal est de permettre à l’opérateur de taxis de :
 - **Identifiant de série :** `pickup_community_area`
 - **Granularité :** Horaire (`timestamp_hour`)
 - **Horizon de prévision :** 24h (configurable)
-- **Approche :** Forecasting multi-séries automatisé avec Vertex AI Forecast (AutoML)
+- **Approche :** Modèle personnalisé **XGBoost** entraîné sur Vertex AI avec optimisation d'hyperparamètres (Hypertune).
 - **Métriques de référence :** RMSE, MAE, MAPE (WAPE, MASE)
 
 ---
@@ -60,34 +60,36 @@ L’objectif métier principal est de permettre à l’opérateur de taxis de :
 - Intégration exogène :
   - Données météo (via API NOAA, optionnel)
   - Calendrier des événements publics (optionnel)
-- Création automatique des lags et fenêtres (par Vertex AI Forecast)
+- Création **manuelle** des lags et fenêtres glissantes (via script Python/Pandas).
+- Encodage cyclique des features temporelles (sin/cos).
+- Encodage One-Hot des identifiants de série (`pickup_community_area`).
 
 ### ML.3.4.3.3 Feature Engineering
 
-Feature engineering was primarily performed within BigQuery to leverage its scalability for processing the large dataset. The goal was to create a structured time series dataset suitable for Vertex AI Forecast.
+Feature engineering was primarily performed within BigQuery to leverage its scalability for processing the large dataset. The goal was to create a structured time series dataset suitable for training a forecasting model. Additional feature engineering steps specific to the XGBoost model are performed in Python during the training and prediction phases.
 
 **Key Steps:**
 
-1.  **Aggregation:** Raw trip data was aggregated to calculate the hourly `trip_count` for each `pickup_community_area`.
-2.  **Time Index Generation:** A complete sequence of hourly timestamps covering the entire period of the raw data was generated.
-3.  **Cartesian Product & Filling:** A Cartesian product between all unique community areas and all hourly timestamps was created. This ensures a complete grid. The aggregated `trip_count` was then joined, filling missing combinations (hours/zones with no trips) with a `trip_count` of 0.
-4.  **Temporal Feature Creation:** Standard temporal features were extracted directly from the `timestamp_hour`: `hour`, `day_of_week`, `month`, `year`, `day_of_year`.
-5.  **Derived Temporal Features:** Simple binary flags like `is_weekend` and `is_holiday` (based on common US holidays) were created.
-6.  **Lag/Window Features:** Vertex AI Forecast automatically generates lag features, window-based features (e.g., moving averages), and other time-series specific features during training. Therefore, these were not explicitly engineered in the BigQuery step.
+1.  **Aggregation (BigQuery):** Raw trip data was aggregated to calculate the hourly `trip_count` for each `pickup_community_area`.
+2.  **Time Index Generation (BigQuery):** A complete sequence of hourly timestamps covering the entire period of the raw data was generated.
+3.  **Cartesian Product & Filling (BigQuery):** A Cartesian product between all unique community areas and all hourly timestamps was created. This ensures a complete grid. The aggregated `trip_count` was then joined, filling missing combinations (hours/zones with no trips) with a `trip_count` of 0.
+4.  **Basic Temporal Feature Creation (BigQuery):** Standard temporal features were extracted directly from the `timestamp_hour`: `hour`, `day_of_week`, `month`, `year`, `day_of_year`.
+5.  **Derived Temporal Features (BigQuery):** Simple binary flags like `is_weekend` and `is_holiday` (based on common US holidays) were created.
+6.  **Lag/Window & Advanced Features (Python/Pandas):** Features specifically beneficial for tree-based models like XGBoost are generated in Python scripts (`src/pipelines/components/preprocessing/feature_engineering.py`) before training and prediction. This includes:
+    *   **Lag Features:** Past values of the target variable (`trip_count`).
+    *   **Rolling Window Features:** Statistics (e.g., mean) calculated over rolling time windows of past target values.
+    *   **Cyclical Features:** Sine and cosine transformations of temporal features (`hour`, `day_of_week`) to capture cyclical patterns smoothly.
+    *   **One-Hot Encoding:** Conversion of the categorical `pickup_community_area` into numerical features.
 
-**Final Features Provided to Vertex AI Forecast:**
-*   `timestamp_hour`: (TIMESTAMP) The specific hour (time column).
-*   `pickup_community_area`: (INTEGER/STRING) The identifier for each time series.
-*   `trip_count`: (INTEGER) The target variable to forecast.
-*   `hour`: (INTEGER) Hour of the day (0-23) - Captures daily cycles.
-*   `day_of_week`: (INTEGER) Day of the week (e.g., 1-7 or 0-6) - Captures weekly cycles.
-*   `month`: (INTEGER) Month of the year (1-12) - Captures yearly seasonality.
-*   `year`: (INTEGER) Year.
-*   `day_of_year`: (INTEGER) Day of the year (1-366).
-*   `is_weekend`: (INTEGER/BOOLEAN) Flag for Saturday/Sunday.
-*   `is_holiday`: (INTEGER/BOOLEAN) Flag for specific major holidays.
+**Final Features Provided to XGBoost Model (Illustrative):**
+*   `hour`, `day_of_week`, `month`, `year`, `day_of_year`, `is_weekend`, `is_holiday` (From BigQuery)
+*   `target_lag_1`, `target_lag_2`, ... (From Python)
+*   `target_rollmean_3`, `target_rollmean_6`, ... (From Python)
+*   `hour_sin`, `hour_cos`, `dow_sin`, `dow_cos` (From Python)
+*   `area_1`, `area_2`, ..., `area_77` (One-Hot Encoded `pickup_community_area` from Python)
+*   *(Note: `timestamp_hour` and `pickup_community_area` are used for joining/grouping but typically not directly as features in the final model matrix)*
 
-These features provide the model with essential information about the time context for each observation.
+These features provide the model with essential information about the time context, recent history, and categorical identity for each observation.
 
 **Code Snippets Example (Illustrative from `bigquery_queries.sql`):**
 
@@ -297,169 +299,157 @@ This demonstrates how the SQL logic is encapsulated and invoked programmatically
 
 ### ML.3.4.3.5 Machine Learning Model Design(s) and Selection
 
-**Model Selected:** Vertex AI Forecast (using AutoML)
+**Model Selected:** Custom **XGBoost** Model trained on Vertex AI
 
 **Rationale for Selection:**
-Vertex AI Forecast (AutoML) was chosen for this multi-time-series forecasting task due to several advantages:
+XGBoost (Extreme Gradient Boosting) is an excellent choice for this task of forecasting taxi demand for several reasons, making it a good candidate for the Google demo:
 
-*   **Automated Feature Engineering:** Handles complex time-series feature engineering internally (lags, windows, embeddings, etc.), reducing manual effort.
-*   **Algorithm Selection & HPO:** Automatically tests various state-of-the-art forecasting algorithms (like Temporal Fusion Transformers, ARIMA+, etc.) and performs hyperparameter optimization within the allocated budget.
-*   **Scalability:** Built to handle large datasets and a high number of time series (in this case, one per community area).
-*   **Ease of Use:** Simplifies the training process through the Vertex AI SDK and UI, allowing focus on the problem definition rather than low-level implementation details.
-*   **Integration:** Natively integrates with Vertex AI Datasets, Model Registry, and Batch Prediction services.
-*   **Best Practices:** Incorporates best practices for time series splitting and evaluation automatically.
+*   **Performance on Tabular Data:** XGBoost excels on structured/tabular data, which is exactly what we get after transforming the raw time series into a feature-rich table (temporal features, lags, rolling averages, categorical indicators like zone). It effectively captures complex, non-linear relationships between these features and the target (number of trips).
+*   **Efficient Feature Management:**
+    *   It can handle a large number of features, useful as feature engineering can generate many (especially with lags, rolling averages, and one-hot encoding of zones).
+    *   It provides feature importance metrics (`feature_importance_`), helping understand which factors most influence demand and guiding model improvement or feature selection.
+*   **Built-in Regularization:** XGBoost natively includes L1 (Lasso) and L2 (Ridge) regularization via `reg_alpha` and `reg_lambda` parameters. This is crucial for preventing overfitting, especially with potentially noisy data and many correlated features (like lags and rolling averages).
+*   **Speed and Scalability:** Implemented in C++ and optimized for performance (parallel computation, efficient memory management, optimized tree algorithms). While extreme scalability might not be necessary for this specific dataset, its speed allows faster iteration and hyperparameter tuning within a reasonable time.
+*   **Missing Value Handling:** XGBoost can natively handle missing values, although clean imputation beforehand is often preferable.
+*   **Flexibility and Robustness:** Offers numerous hyperparameters for fine-tuning. Gradient boosting itself is robust and often yields state-of-the-art results for this type of problem compared to simpler linear models or even traditional statistical approaches (like ARIMA) which may handle exogenous features less effectively.
+*   **Popularity and Support:** It's a very popular, well-documented library with a large community, facilitating problem-solving and applying best practices.
+
+In summary, for a forecasting problem where the time series is transformed into a rich tabular dataset, XGBoost offers an excellent balance between predictive performance, training speed, robustness against overfitting, and relative interpretability (via feature importance), making it highly relevant for the demo.
 
 **Alternative Models Considered (Briefly):**
-*   **Custom Models (e.g., XGBoost, LSTM):** While powerful, these would require significant manual feature engineering (especially for lags/windows), careful handling of multiple time series, and manual HPO, increasing complexity and development time.
-*   **Traditional Statistical Models (ARIMA, Prophet):** Might struggle with the large number of series and potentially complex interactions that AutoML can capture.
+*   **Vertex AI Forecast (AutoML):** A powerful automated solution, but using a custom model like XGBoost allows for more granular control over feature engineering and model architecture, demonstrating different Vertex AI capabilities (Custom Training, Hypertune).
+*   **Other Custom Models (e.g., LSTM, LightGBM):** LSTMs might be overly complex for this tabular structure post-feature engineering. LightGBM is a strong alternative to XGBoost, often faster but sometimes slightly less accurate.
+*   **Traditional Statistical Models (ARIMA, Prophet):** Might struggle with the large number of series and the effective incorporation of numerous exogenous features compared to gradient boosting.
 
-**Code Snippet Example (Illustrative - KFP Component Call):**
+**Code Snippet Example (Illustrative - KFP Component Call for Custom Training Job):**
 
-*Initializing and running the AutoML Training Job (from `src/pipelines/components/train_forecasting_model.py` via `forecasting_pipeline.py`):
+*Launching the Custom Training Job with Hypertune (conceptual, based on `src/pipelines/components/model_training/launch_hpt_job.py`):*
 ```python
-# Within the KFP component train_forecasting_model.py
-from google.cloud import aiplatform
+# Within the KFP pipeline definition (forecasting_pipeline.py)
+from src.pipelines.components.model_training.launch_hpt_job import launch_hpt_job
 
-def train_forecasting_model(
-    project: str,
-    location: str,
-    display_name: str,
-    dataset_resource_name: Input[Artifact],
-    target_column: str,
-    time_column: str,
-    time_series_identifier_column: str,
-    forecast_horizon: int,
-    context_window: int,
-    # ... other params like granularity, optimization_objective, budget
-):
-    aiplatform.init(project=project, location=location)
+# ... define HPT config, worker spec, static args ...
 
-    # Define the AutoML Forecasting job
-    job = aiplatform.AutoMLForecastingTrainingJob(
-        display_name=f"{display_name}_training_job",
-        optimization_objective=optimization_objective # e.g., "minimize-rmse"
-    )
-
-    # Launch the training job
-    model = job.run(
-        dataset=aiplatform.TimeSeriesDataset(dataset_resource_name.path.read()),
-        target_column=target_column,
-        time_column=time_column,
-        time_series_identifier_column=time_series_identifier_column,
-        forecast_horizon=forecast_horizon,
-        context_window=context_window,
-        # Transformations can be specified here if needed
-        # transformation=[...]
-        budget_milli_node_hours=budget_milli_node_hours,
-        model_display_name=display_name
-        # Other parameters like available/unavailable columns can be added
-    )
-
-    # Output the trained model's resource name
-    # model_resource_name.path.open("w").write(model.resource_name)
-    print(f"Model trained: {model.resource_name}")
+launch_hpt_op = launch_hpt_job(
+    project=project,
+    location=location,
+    staging_bucket=staging_bucket,
+    display_name_prefix=hpt_display_name_prefix, # e.g., "xgboost-hpt"
+    worker_pool_spec=worker_full_spec, # Defines container and machine type
+    hpt_config=hpt_full_config, # Defines HPT metric, goal, params, algo
+    static_args=static_script_args, # Args passed to the training script
+    training_data_uri=prepare_data_op.outputs["destination_table_uri"] # Input data
+)
+# The component launches a Vertex AI HyperparameterTuningJob,
+# which manages multiple CustomJob trials running the XGBoost training script.
 ```
-This snippet shows the core SDK call used within the pipeline component to initiate the Vertex AI Forecast training process.
+This snippet shows how a custom training job, potentially wrapped in a hyperparameter tuning job, is launched via a KFP component.
 
 ### ML.3.4.3.6 Machine Learning Model Training and Development
 
-Model training is performed using Vertex AI Training, specifically leveraging the AutoML Forecasting capability orchestrated via a Vertex AI Pipeline.
+Model training is performed using **Vertex AI Custom Training**, potentially orchestrated by **Vertex AI Hyperparameter Tuning (Hypertune)**, all managed via a Vertex AI Pipeline.
 
-**Training Environment:** Vertex AI Training (Serverless)
+**Training Environment:** Vertex AI Custom Training (using pre-built or custom containers)
 
 **Key Aspects:**
 
-*   **Data Splitting (Sampling):** Vertex AI Forecast automatically handles data splitting for time series. By default, it uses a chronological split based on the time column. The typical splits configured (visible in `config/pipeline_config.yaml` or passed to the job) are often 80% for training, 10% for validation, and 10% for testing. This ensures the model is validated and tested on data points that occur *after* the training data, preventing data leakage from the future.
-    *   *Code Snippet (Illustrative - Parameters affecting splits are part of `job.run`):* The `forecast_horizon` and `context_window` parameters implicitly define how data is used. Vertex AI determines the latest possible training data point based on the horizon needed for the first test point. Specific split fractions (`training_fraction_split`, `validation_fraction_split`, `test_fraction_split`) can also be set if default behavior needs overriding.
-*   **Implementation & GCP Best Practices:**
-    *   **Vertex AI SDK & Pipelines:** Training is invoked programmatically using the `google-cloud-aiplatform` SDK within a KFP component, facilitating MLOps automation and reproducibility.
-    *   **Serverless Training:** AutoML training jobs run on Google-managed infrastructure, eliminating the need for manual provisioning or management of training clusters.
-    *   **Artifact Management:** The trained model is automatically registered in the Vertex AI Model Registry, linking it to the training job and dataset.
-    *   **Monitoring:** Training progress and resource consumption can be monitored via the Google Cloud Console (Vertex AI -> Training).
-    *   *Code Snippet:* The `job.run(...)` call shown in the previous section (ML.3.4.3.5) represents the core implementation step following GCP best practices for managed ML training.
-*   **Evaluation Metric:** The primary metric used for optimization is **Root Mean Squared Error (RMSE)** (`optimization_objective='minimize-rmse'`).
-    *   **Rationale:** RMSE was chosen because it heavily penalizes large prediction errors. In the context of taxi demand, underestimating demand significantly during peak hours (leading to large errors) could result in poor service and lost revenue, making it important to minimize these large deviations. Other metrics like MAE or MAPE are also calculated by Vertex AI and can be used for supplementary evaluation.
-*   **Hyperparameter Optimization (HPO):** Vertex AI AutoML internally performs HPO. It searches through different model architectures and hyperparameters within the constraints of the allocated training budget (`budget_milli_node_hours`). The specific algorithms and search space are managed by Google.
-    *   *Code Snippet (Illustrative - Budget Parameter):* The budget is specified during the `job.run` call:
+*   **Data Splitting (Sampling):** Data splitting is performed **manually within the custom training script** (`src/pipelines/components/model_training/train_xgboost_hpt.py`). A chronological split is typically used, separating the data loaded from BigQuery into training and validation sets based on timestamps (e.g., using `train_end_date` and `val_end_date`). This ensures the model is validated on data points that occur *after* the training data.
+    *   *Code Snippet (Illustrative - From `train_xgboost_hpt.py`):*
         ```python
-        model = job.run(
-            # ... other parameters ...
-            budget_milli_node_hours=1000 # Example: 1 node hour budget
-            # ...
+        # ... load data into df ...
+        # Apply feature engineering
+        df = preprocess_data_for_xgboost(df, is_train=True)
+        X, y = df.drop(columns=[target_col]), df[target_col]
+
+        # Split based on time column
+        train_mask = pd.to_datetime(df[time_col]) < pd.to_datetime(train_end_date)
+        val_mask = (pd.to_datetime(df[time_col]) >= pd.to_datetime(train_end_date)) & \
+                   (pd.to_datetime(df[time_col]) < pd.to_datetime(val_end_date))
+        X_train, y_train = X[train_mask], y[train_mask]
+        X_val, y_val = X[val_mask], y[val_mask]
+
+        # Train XGBoost model
+        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], ...)
+        ```
+*   **Implementation & GCP Best Practices:**
+    *   **Vertex AI SDK & Pipelines:** Training is invoked programmatically using the `google-cloud-aiplatform` SDK within KFP components (`launch_hpt_job.py`), facilitating MLOps automation and reproducibility.
+    *   **Custom Training Jobs:** Training runs as a Vertex AI Custom Job, executing the provided Python script (`train_xgboost_hpt.py`) within a specified container environment (e.g., `worker_container_uri`).
+    *   **Artifact Management:** The trained model (`model.xgb`) is saved to a GCS location specified by the environment variable `AIP_MODEL_DIR`, managed by Vertex AI. The path to the best model from HPT is an output of the `launch_hpt_op` component.
+    *   **Monitoring:** Training progress (logs) and resource consumption can be monitored via the Google Cloud Console (Vertex AI -> Training -> Custom Jobs / Hyperparameter Tuning Jobs).
+    *   *Code Snippet:* The KFP component invocation shown in the previous section (ML.3.4.3.5) represents the core implementation step following GCP best practices for managed custom ML training.
+*   **Evaluation Metric:** The primary metric used for optimization during HPT is **Root Mean Squared Error (RMSE)** (specified in `hpt_config` and reported by the training script using the `hypertune` library).
+    *   **Rationale:** RMSE heavily penalizes large prediction errors, which is important for avoiding significant underestimation of taxi demand during peak hours.
+*   **Hyperparameter Optimization (HPO):** Vertex AI Hypertune is used to find the best hyperparameters for the XGBoost model. It systematically runs multiple training trials (Custom Jobs) with different hyperparameter combinations (e.g., `n_estimators`, `learning_rate`, `max_depth`) specified in `hpt_config`. The training script (`train_xgboost_hpt.py`) calculates the RMSE on the validation set and reports it back to Hypertune using the `hypertune` library. Hypertune then selects the trial with the best metric value.
+    *   *Code Snippet (Illustrative - Reporting metric in `train_xgboost_hpt.py`):*
+        ```python
+        # ... train model and calculate rmse on validation set ...
+        import hypertune
+
+        hpt = hypertune.HyperTune()
+        hpt.report_hyperparameter_tuning_metric(
+            hyperparameter_metric_tag='rmse', # Must match hpt_config
+            metric_value=rmse,
+            # global_step=EPOCHS # Optional: if reporting per epoch
         )
         ```
 *   **Bias/Variance Optimization:**
-    *   **Variance Control (Overfitting):** The use of a separate validation set (handled automatically by the chronological split) allows AutoML to monitor performance on unseen data during training and select models/hyperparameters that generalize well, mitigating overfitting.
-    *   **Bias Assessment (Underfitting):** By examining the final evaluation metrics on the test set (see next section), we can assess potential bias. If all error metrics (RMSE, MAE, etc.) are high across most time series, it might indicate the model is too simple or lacks the capacity to capture the underlying patterns (underfitting). AutoML aims to find a good balance by exploring complex models.
-    *   The performance on the validation set during the AutoML search helps guide the selection towards models that balance bias and variance effectively for the given budget.
+    *   **Variance Control (Overfitting):** The use of a separate validation set for early stopping (`early_stopping_rounds` in `model.fit`) and for Hypertune's metric reporting helps select models/hyperparameters that generalize well, mitigating overfitting. XGBoost's built-in regularization (`reg_alpha`, `reg_lambda`) also helps.
+    *   **Bias Assessment (Underfitting):** If validation RMSE remains high across many HPT trials, it might indicate the model complexity (e.g., `max_depth`) is too constrained or the features are insufficient. Hypertune explores different complexities to find a good balance.
+    *   Hypertune, combined with validation set monitoring within each trial, aims to find a model that balances bias and variance effectively.
 
 ### ML.3.4.3.7 Machine Learning Model Evaluation
 
 **Evaluation Process:**
-Vertex AI Forecast automatically evaluates the trained model(s) on the test set portion of the data (typically the final 10% chronologically, withheld during training and validation). The evaluation metrics are computed across all time series and forecast horizons.
+Model evaluation occurs **within the custom training script** (`train_xgboost_hpt.py`) during each Hypertune trial. The script calculates metrics on the **validation set** after training the model with a specific set of hyperparameters. The primary metric (RMSE) is reported back to Vertex AI Hypertune to guide the search for the best model.
+
+Final evaluation on a separate **test set** (if defined and split in the script, though the current example focuses on train/validation for HPT) would typically be done *after* HPT has identified the best hyperparameters, potentially in a separate pipeline step or at the end of the best trial's script.
 
 **Retrieving Metrics:**
-These evaluation metrics can be accessed in two ways:
-1.  **Google Cloud Console:** Navigate to Vertex AI -> Training -> [Your Training Job Name] -> Model tab. The UI displays comprehensive evaluation metrics and visualizations.
-2.  **Vertex AI SDK:** Programmatically retrieve the evaluation results using the trained model object.
+1.  **Hypertune Results:** The primary metric (RMSE) for each trial and the best trial's results are visible in the Google Cloud Console (Vertex AI -> Training -> Hyperparameter Tuning Jobs -> [Your Job Name]).
+2.  **Training Job Logs:** The training script (`train_xgboost_hpt.py`) prints metrics (like validation RMSE) to the logs, which can be viewed in the Cloud Console under the specific Custom Job (trial) details.
+3.  **Pipeline Outputs:** The KFP component `launch_hpt_job` outputs the GCS path to the best model found by Hypertune. Evaluation metrics could potentially be saved as pipeline artifacts if the training script is modified to do so.
 
-**Key Evaluation Metrics (Provided by Vertex AI Forecast):**
-*   **RMSE (Root Mean Squared Error):** The primary optimization target. Measures the square root of the average squared differences between predicted and actual values. Sensitive to large errors.
-*   **MAE (Mean Absolute Error):** Average absolute difference between predicted and actual values. Less sensitive to outliers than RMSE.
-*   **MAPE (Mean Absolute Percentage Error):** Average percentage difference. Useful for understanding error relative to the actual values, but can be skewed by low actual values.
-*   **WAPE (Weighted Absolute Percentage Error):** Similar to MAPE but weighted by the actual values, making it more stable when actuals are near zero.
-*   **R² (R-squared):** Coefficient of determination. Indicates the proportion of variance in the dependent variable predictable from the independent variables (features). Not always the best metric for time series.
-*   **Quantile Errors (e.g., P50, P90):** Error metrics calculated at specific quantiles, useful for understanding prediction intervals and uncertainty.
+**Key Evaluation Metrics (Calculated in Script):**
+*   **RMSE (Root Mean Squared Error):** Primary metric for HPT. Calculated on the validation set.
+*   **MAE (Mean Absolute Error):** Can be calculated alongside RMSE in the script for additional insight.
+*   *(Other metrics like MAPE, WAPE, R² could also be calculated within the script if desired)*
 
-**Example Evaluation Results (Illustrative - Replace with Actual Values):**
-*(These values should be populated from your actual Vertex AI Training Job results)*
+**Example Evaluation Results (Illustrative - From Best HPT Trial):**
+*(These values should be populated from your actual Vertex AI Hypertune Job results or logs)*
 
-| Metric          | Value (Test Set) |
-| :-------------- | :--------------- |
-| RMSE            | 15.3             |
-| MAE             | 9.8              |
-| MAPE            | 35.2%            |
-| WAPE            | 28.1%            |
-| R²              | 0.75             |
-| P50 MAE         | 8.5              |
-| P90 MAE         | 14.2             |
+| Metric          | Value (Validation Set) | Source         |
+| :-------------- | :--------------------- | :------------- |
+| RMSE            | 12.5                   | Hypertune/Logs |
+| MAE             | 8.2                    | Logs (if added) |
+| *(Other)*       | ...                    | Logs (if added) |
 
-*(Include a brief interpretation, e.g., "The RMSE of 15.3 indicates an average error magnitude... The WAPE suggests an average error of about 28% weighted by volume... The model explains 75% of the variance according to R².")*
+*(Include a brief interpretation, e.g., "The best model found by Hypertune achieved an RMSE of 12.5 on the validation set...")*
 
-**Code Snippet Example (Illustrative - Retrieving Evaluation via SDK):**
+**Code Snippet Example (Illustrative - Calculating & Printing Metrics in `train_xgboost_hpt.py`):**
 ```python
-from google.cloud import aiplatform
+# ... after model.fit() ...
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+import numpy as np
+import hypertune # Already imported for reporting
 
-# Assuming 'model' is the trained aiplatform.Model object retrieved after training
-# Example: model = aiplatform.Model('projects/PROJECT_ID/locations/REGION/models/MODEL_ID')
+print("Evaluating model...")
+predictions = model.predict(X_val)
+rmse = np.sqrt(mean_squared_error(y_val, predictions))
+mae = mean_absolute_error(y_val, predictions) # Example: Calculate MAE too
 
-# List model evaluations (usually one for AutoML)
-evaluations = model.list_model_evaluations()
+print(f"Validation RMSE: {rmse}")
+print(f"Validation MAE: {mae}") # Print MAE to logs
 
-if evaluations:
-    # Get the first (typically only) evaluation
-    model_evaluation = evaluations[0]
+print("Reporting metric to Hypertune...")
+hpt = hypertune.HyperTune()
+hpt.report_hyperparameter_tuning_metric(
+    hyperparameter_metric_tag='rmse', # Must match hpt_config
+    metric_value=rmse
+)
 
-    print(f"Model Evaluation Resource Name: {model_evaluation.resource_name}")
-    print(f"Metrics Dict: {model_evaluation.metrics}")
-
-    # Access specific metrics (keys might vary slightly based on model type)
-    rmse = model_evaluation.metrics.get('rmse')
-    mae = model_evaluation.metrics.get('mae')
-    mape = model_evaluation.metrics.get('mape')
-    wape = model_evaluation.metrics.get('wape') # Or similar key
-    r2 = model_evaluation.metrics.get('rSquared') # Or similar key
-
-    print(f"RMSE: {rmse}")
-    print(f"MAE: {mae}")
-    print(f"MAPE: {mape}%") # Check if MAPE is scaled
-    print(f"WAPE: {wape}%") # Check if WAPE is scaled
-    print(f"R-squared: {r2}")
-else:
-    print("No model evaluations found for this model.")
-
+# (Optional: Could save detailed metrics to GCS here)
 ```
-This snippet shows how to programmatically access the evaluation metrics stored with the registered Vertex AI model.
+This snippet shows how metrics are calculated on the validation set within the script and how the primary one is reported for HPT.
 
 ---
 
@@ -482,145 +472,41 @@ This snippet shows how to programmatically access the evaluation metrics stored 
 
 ---
 
-## 🤖 Model Development – Vertex AI Forecast
+## 🤖 Model Development – Custom XGBoost on Vertex AI
 
-### 📦 Dataset
+### 📦 Data Loading & Preprocessing (Python)
 
-- Création via `aiplatform.TimeSeriesDataset.create_from_bigquery()`
-- Colonnes spécifiées :
-  - `time_column`: `timestamp_hour`
-  - `target_column`: `trip_count`
-  - `time_series_identifier_column`: `pickup_community_area`
-  - Features disponibles : `hour`, `day_of_week`, `month`, `is_holiday`, etc.
+- Data loaded from BigQuery table (`demand_by_hour`) into Pandas DataFrame within the training script.
+- Feature Engineering (`preprocess_data_for_xgboost`):
+  - Applied within the script after loading data.
+  - Creates lags, rolling means, cyclical features, one-hot encoding.
+  - Handles `NaN` values resulting from lags (drops for training, kept for prediction).
+- Data split chronologically into Training and Validation sets.
 
-### 🚀 Entraînement
+### 🚀 Entraînement (Vertex AI Custom Job + Hypertune)
 
-- Job : `AutoMLForecastingTrainingJob`
-- Paramètres :
-  - `forecast_horizon`: 24
-  - `context_window`: 168 (1 semaine)
-  - `optimization_objective`: `minimize-rmse`
-  - Budget : 1h à 4h selon configuration
-- Résultat : modèle déployable dans Vertex AI
+- Script : `src/pipelines/components/model_training/train_xgboost_hpt.py`
+- Modèle : `xgboost.XGBRegressor`
+- HPO : Vertex AI Hypertune searches optimal XGBoost parameters (`n_estimators`, `learning_rate`, `max_depth`, etc.) based on `pipeline_config.yaml`.
+- Environnement : Container specified in `pipeline_config.yaml` (`worker_container_uri`).
+- Objectif HPO : `minimize-rmse` sur le jeu de validation.
+- Résultat : Meilleur modèle XGBoost (`model.xgb`) sauvegardé sur GCS.
 
 ### 📈 Évaluation
 
-- Backtesting intégré
-- Métriques :
-  - RMSE, MAE, R², quantiles
-- Visualisation des résultats dans `3_Forecasting_Training.ipynb`
-
-### ML.3.4.3.6 Machine Learning Model Training and Development
-
-Model training is performed using Vertex AI Training, specifically leveraging the AutoML Forecasting capability orchestrated via a Vertex AI Pipeline.
-
-**Training Environment:** Vertex AI Training (Serverless)
-
-**Key Aspects:**
-
-*   **Data Splitting (Sampling):** Vertex AI Forecast automatically handles data splitting for time series. By default, it uses a chronological split based on the time column. The typical splits configured (visible in `config/pipeline_config.yaml` or passed to the job) are often 80% for training, 10% for validation, and 10% for testing. This ensures the model is validated and tested on data points that occur *after* the training data, preventing data leakage from the future.
-    *   *Code Snippet (Illustrative - Parameters affecting splits are part of `job.run`):* The `forecast_horizon` and `context_window` parameters implicitly define how data is used. Vertex AI determines the latest possible training data point based on the horizon needed for the first test point. Specific split fractions (`training_fraction_split`, `validation_fraction_split`, `test_fraction_split`) can also be set if default behavior needs overriding.
-*   **Implementation & GCP Best Practices:**
-    *   **Vertex AI SDK & Pipelines:** Training is invoked programmatically using the `google-cloud-aiplatform` SDK within a KFP component, facilitating MLOps automation and reproducibility.
-    *   **Serverless Training:** AutoML training jobs run on Google-managed infrastructure, eliminating the need for manual provisioning or management of training clusters.
-    *   **Artifact Management:** The trained model is automatically registered in the Vertex AI Model Registry, linking it to the training job and dataset.
-    *   **Monitoring:** Training progress and resource consumption can be monitored via the Google Cloud Console (Vertex AI -> Training).
-    *   *Code Snippet:* The `job.run(...)` call shown in the previous section (ML.3.4.3.5) represents the core implementation step following GCP best practices for managed ML training.
-*   **Evaluation Metric:** The primary metric used for optimization is **Root Mean Squared Error (RMSE)** (`optimization_objective='minimize-rmse'`).
-    *   **Rationale:** RMSE was chosen because it heavily penalizes large prediction errors. In the context of taxi demand, underestimating demand significantly during peak hours (leading to large errors) could result in poor service and lost revenue, making it important to minimize these large deviations. Other metrics like MAE or MAPE are also calculated by Vertex AI and can be used for supplementary evaluation.
-*   **Hyperparameter Optimization (HPO):** Vertex AI AutoML internally performs HPO. It searches through different model architectures and hyperparameters within the constraints of the allocated training budget (`budget_milli_node_hours`). The specific algorithms and search space are managed by Google.
-    *   *Code Snippet (Illustrative - Budget Parameter):* The budget is specified during the `job.run` call:
-        ```python
-        model = job.run(
-            # ... other parameters ...
-            budget_milli_node_hours=1000 # Example: 1 node hour budget
-            # ...
-        )
-        ```
-*   **Bias/Variance Optimization:**
-    *   **Variance Control (Overfitting):** The use of a separate validation set (handled automatically by the chronological split) allows AutoML to monitor performance on unseen data during training and select models/hyperparameters that generalize well, mitigating overfitting.
-    *   **Bias Assessment (Underfitting):** By examining the final evaluation metrics on the test set (see next section), we can assess potential bias. If all error metrics (RMSE, MAE, etc.) are high across most time series, it might indicate the model is too simple or lacks the capacity to capture the underlying patterns (underfitting). AutoML aims to find a good balance by exploring complex models.
-    *   The performance on the validation set during the AutoML search helps guide the selection towards models that balance bias and variance effectively for the given budget.
-
-### ML.3.4.3.7 Machine Learning Model Evaluation
-
-**Evaluation Process:**
-Vertex AI Forecast automatically evaluates the trained model(s) on the test set portion of the data (typically the final 10% chronologically, withheld during training and validation). The evaluation metrics are computed across all time series and forecast horizons.
-
-**Retrieving Metrics:**
-These evaluation metrics can be accessed in two ways:
-1.  **Google Cloud Console:** Navigate to Vertex AI -> Training -> [Your Training Job Name] -> Model tab. The UI displays comprehensive evaluation metrics and visualizations.
-2.  **Vertex AI SDK:** Programmatically retrieve the evaluation results using the trained model object.
-
-**Key Evaluation Metrics (Provided by Vertex AI Forecast):**
-*   **RMSE (Root Mean Squared Error):** The primary optimization target. Measures the square root of the average squared differences between predicted and actual values. Sensitive to large errors.
-*   **MAE (Mean Absolute Error):** Average absolute difference between predicted and actual values. Less sensitive to outliers than RMSE.
-*   **MAPE (Mean Absolute Percentage Error):** Average percentage difference. Useful for understanding error relative to the actual values, but can be skewed by low actual values.
-*   **WAPE (Weighted Absolute Percentage Error):** Similar to MAPE but weighted by the actual values, making it more stable when actuals are near zero.
-*   **R² (R-squared):** Coefficient of determination. Indicates the proportion of variance in the dependent variable predictable from the independent variables (features). Not always the best metric for time series.
-*   **Quantile Errors (e.g., P50, P90):** Error metrics calculated at specific quantiles, useful for understanding prediction intervals and uncertainty.
-
-**Example Evaluation Results (Illustrative - Replace with Actual Values):**
-*(These values should be populated from your actual Vertex AI Training Job results)*
-
-| Metric          | Value (Test Set) |
-| :-------------- | :--------------- |
-| RMSE            | 15.3             |
-| MAE             | 9.8              |
-| MAPE            | 35.2%            |
-| WAPE            | 28.1%            |
-| R²              | 0.75             |
-| P50 MAE         | 8.5              |
-| P90 MAE         | 14.2             |
-
-*(Include a brief interpretation, e.g., "The RMSE of 15.3 indicates an average error magnitude... The WAPE suggests an average error of about 28% weighted by volume... The model explains 75% of the variance according to R².")*
-
-**Code Snippet Example (Illustrative - Retrieving Evaluation via SDK):**
-```python
-from google.cloud import aiplatform
-
-# Assuming 'model' is the trained aiplatform.Model object retrieved after training
-# Example: model = aiplatform.Model('projects/PROJECT_ID/locations/REGION/models/MODEL_ID')
-
-# List model evaluations (usually one for AutoML)
-evaluations = model.list_model_evaluations()
-
-if evaluations:
-    # Get the first (typically only) evaluation
-    model_evaluation = evaluations[0]
-
-    print(f"Model Evaluation Resource Name: {model_evaluation.resource_name}")
-    print(f"Metrics Dict: {model_evaluation.metrics}")
-
-    # Access specific metrics (keys might vary slightly based on model type)
-    rmse = model_evaluation.metrics.get('rmse')
-    mae = model_evaluation.metrics.get('mae')
-    mape = model_evaluation.metrics.get('mape')
-    wape = model_evaluation.metrics.get('wape') # Or similar key
-    r2 = model_evaluation.metrics.get('rSquared') # Or similar key
-
-    print(f"RMSE: {rmse}")
-    print(f"MAE: {mae}")
-    print(f"MAPE: {mape}%") # Check if MAPE is scaled
-    print(f"WAPE: {wape}%") # Check if WAPE is scaled
-    print(f"R-squared: {r2}")
-else:
-    print("No model evaluations found for this model.")
-
-```
-This snippet shows how to programmatically access the evaluation metrics stored with the registered Vertex AI model.
+- Effectuée dans le script d'entraînement sur le jeu de validation.
+- Métrique principale (RMSE) reportée à Hypertune.
+- Métriques additionnelles (MAE, etc.) visibles dans les logs du job d'entraînement.
 
 ---
 
 ## 🤖 Deployment – Batch Prediction Strategy
 
-- Usage de `Vertex AI Batch Prediction`
-- Données d’entrée : table BigQuery `forecast_input`
-- Résultats : table `forecast_output` contenant les prédictions
-- Script : `4_Batch_Prediction_Demo.ipynb`
-- Visualisation :
-  - Graphiques temporels par zone
-  - Comparaison entre zones
+- Usage de `Vertex AI Batch Prediction` avec un **modèle XGBoost personnalisé**.
+- Données d’entrée : Fichier CSV sur GCS (`future_features.csv`) généré par `generate_forecast_input.py`, contenant les features futures pré-calculées (y compris lags, rolling means basés sur les données historiques les plus récentes, features cycliques, one-hot encoding).
+- Modèle : Le fichier `model.xgb` du meilleur modèle XGBoost trouvé par Hypertune, chargé depuis GCS.
+- Résultats : Fichier CSV (`predictions.csv`) sur GCS contenant les prédictions.
+- Composant KFP : `src/pipelines/components/predictions/batch_predict_xgboost.py`
 
 ---
 
@@ -646,7 +532,7 @@ This snippet shows how to programmatically access the evaluation metrics stored 
 
 ## 📌 Architecture Résumée
 
-BigQuery (raw) │ ├──> SQL (agrégation horaire + FE) │ ↓ BQ (demand_by_hour) │ └──> Vertex AI Forecast ├──> Training Job ├──> Model └──> Batch Prediction ↓ BQ Output + Viz
+BigQuery (raw) │ ├──> SQL (agrégation horaire + FE de base) │ ↓ BQ (demand_by_hour) │ └──> Vertex AI Pipeline ├──> Custom Training Job (Python/XGBoost + FE avancée) │ ├──> Hypertune │ ├──> Best Model (GCS) │ ├──> Generate Future Features (Python + FE avancée) │ ↓ GCS (future_features.csv) │ └──> Batch Prediction (using Best Model) ↓ GCS (predictions.csv) + Viz
 ---
 
 ## 📅 Prochaines étapes
@@ -662,6 +548,11 @@ BigQuery (raw) │ ├──> SQL (agrégation horaire + FE) │ ↓ BQ (demand_
 
 | Élément | Chemin |
 |--------|--------|
-| Données BQ | `chicago_taxis.demand_by_hour` |
-| Script prétraitement | `src/data_preprocessing/bigquery_queries.sql` |
-| Notebook entraînement | `notebooks/3_Forecasting_Training.ipynb`
+| Données BQ préparées | `chicago_taxis.demand_by_hour` |
+| Script prétraitement BQ | `src/pipelines/components/data_preparation/run_bq_forecasting_query.py` (et le SQL associé) |
+| Script Feature Engineering Python | `src/pipelines/components/preprocessing/feature_engineering.py` |
+| Script entraînement XGBoost | `src/pipelines/components/model_training/train_xgboost_hpt.py` |
+| Script génération features futures | `src/pipelines/components/generate_forecasting_data/generate_forecast_input.py` |
+| Script prédiction batch | `src/pipelines/components/predictions/batch_predict_xgboost.py` |
+| Configuration Pipeline | `config/pipeline_config.yaml` |
+| Définition Pipeline KFP | `src/pipelines/forecasting_pipeline.py` |
