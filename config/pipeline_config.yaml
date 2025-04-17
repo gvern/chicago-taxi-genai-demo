@@ -42,24 +42,6 @@ data_preprocessing:
     end_date_str: "2023-11-22" # End date for training data generation
     max_data_points: 2950 # Max number of hours per series for training data
 
-    # Vertex AI Forecast Model Parameters
-vertex_ai_forecast:
-  display_name: "chicago_taxi_forecast_model"
-  optimization_objective: "minimize-rmse"
-  budget_milli_node_hours: 1000    # ~1h d'entraînement
-  column_transformations:
-    timestamp_hour: "timestamp"
-    pickup_community_area: "categorical"
-    trip_count: "numeric"
-    hour: "numeric"
-    day_of_week: "categorical"
-    month: "categorical"
-    day_of_year: "numeric"
-    is_weekend: "categorical"
-    hour_sin: "numeric"
-    hour_cos: "numeric"
-    year: "numeric"
-
 
 custom_training:
   # Static arguments passed to the training script (train_xgboost_hpt.py)
@@ -94,16 +76,16 @@ hyperparameter_tuning:
   metric_goal: "MINIMIZE" # Goal for the metric (MINIMIZE or MAXIMIZE)
   max_trial_count: 20 # Total number of trials
   parallel_trial_count: 4 # Number of trials to run in parallel
-  search_algorithm: "RANDOM_SEARCH" # "RANDOM_SEARCH", "GRID_SEARCH", "BAYESIAN_OPTIMIZATION"
+  search_algorithm: "DEFAULT" # "RANDOM_SEARCH", "GRID_SEARCH", "BAYESIAN_OPTIMIZATION"
 
   # Parameter specification for HPT
   parameter_spec:
     learning_rate:
       parameter_id: "learning_rate"
       type: "DOUBLE"
-      scale_type: "SCALE_TYPE_LOG"
-      min_value: 0.001
-      max_value: 0.1
+      scale_type: "UNIT_LOG_SCALE"
+      min_value: 0.01
+      max_value: 0.3
     n_estimators:
       parameter_id: "n_estimators"
       type: "INTEGER"
@@ -128,8 +110,12 @@ hyperparameter_tuning:
       scale_type: "UNIT_LINEAR_SCALE"
       min_value: 0.5
       max_value: 1.0
-    # Add other hyperparameters to tune here, matching args in train_xgboost_hpt.py
-
+    reg_lambda:                   # Régularisation L2
+      parameter_id: "reg_lambda" 
+      type: "DOUBLE"
+      scale_type: "UNIT_LOG_SCALE" # Echelle log car effet sur ordres de grandeur
+      min_value: 0.1
+      max_value: 10.0
 batch_prediction:
   job_display_name_prefix: "batch_pred_taxi"
   # Optional: Specify machine type if needed, otherwise defaults are used
@@ -150,3 +136,23 @@ forecast_input_generation:
   horizon_hours: 24 # Number of future hours to generate input data for
   forecast_start_time: "2023-11-22T00:00:00Z" # Start time for the forecast
   forecast_horizon_hours: 24 # Number of hours to forecast
+
+
+
+    # Vertex AI Forecast Model Parameters
+#vertex_ai_forecast:
+  #display_name: "chicago_taxi_forecast_model"
+  #optimization_objective: "minimize-rmse"
+  #budget_milli_node_hours: 1000    # ~1h d'entraînement
+  #column_transformations:
+    #timestamp_hour: "timestamp"
+    #pickup_community_area: "categorical"
+    #trip_count: "numeric"
+    #hour: "numeric"
+    #day_of_week: "categorical"
+    #month: "categorical"
+    #day_of_year: "numeric"
+    #is_weekend: "categorical"
+    #hour_sin: "numeric"
+    #hour_cos: "numeric"
+    #year: "numeric"
