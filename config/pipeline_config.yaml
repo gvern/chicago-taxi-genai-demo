@@ -1,158 +1,95 @@
-# Configuration for Custom Training + HPT Pipeline
+# Configuration for Custom Training + HPT Pipeline (v3 - Simple HPT Params & Consistent Keys)
 
 gcp:
-  project_id: "avisia-certification-ml-yde" # Replace with your project ID
-  region: "europe-west1" 
-  staging_bucket: "gs://your-gcs-bucket-name/staging" # IMPORTANT: Replace with your GCS bucket URI
+  project_id: "avisia-certification-ml-yde" # Remplacez par votre Project ID
+  region: "europe-west1"
+  staging_bucket: "gs://chicago-taxis-bucket/staging" # Remplacez par votre bucket GCS
+  # URI de l'image Docker personnalisée pour les composants
+  custom_image_uri: "europe-west1-docker.pkg.dev/avisia-certification-ml-yde/chicago-taxis-demo/forecasting-pipeline:latest"
+  # Optionnel: Compte de service pour l'exécution du pipeline
+  # service_account: "your-pipeline-runner-sa@your-project-id.iam.gserviceaccount.com"
 
 bigquery:
-  dataset_id: "chicago_taxis" # Dataset for pipeline outputs (training table, prediction input/output)
-  source_table_id: "bigquery-public-data.chicago_taxi_trips.taxi_trips" # Source for raw data (used by SQL query)
-  training_table_name: "demand_by_hour" # Name for the generated training table
-  prediction_input_table_name: "forecast_input" # Name for the generated prediction input table
-  prediction_output_prefix: "forecast_output" # Prefix for batch prediction output table
+  dataset_id: "chicago_taxis" # Dataset pour les tables générées
+  source_table_id: "bigquery-public-data.chicago_taxi_trips.taxi_trips" # Table source brute (Clé corrigée)
+  training_table_name: "demand_by_hour" # Nom de la table d'entraînement/préparée générée
 
-# Forecasting Configuration
-forecasting:
-  time_column: timestamp_hour
-  target_column: trip_count
-  context_column: pickup_community_area
-  time_granularity: "hour"
-  forecast_horizon: 24
-  window_size: 168              # Taille du contexte historique utilisé
-  available_at_forecast:        # Toutes ces colonnes sont connues à l'avance (calculables pour l'avenir)
-    - timestamp_hour
-    - day_of_year
-    - day_of_week
-    - hour
-    - month
-    - is_weekend
-    - hour_sin
-    - hour_cos
-    - year
-    - pickup_community_area
-  unavailable_at_forecast:      # Connue uniquement dans le passé
-    - trip_count
+data_preprocessing: # Section pour les paramètres de run_bq_forecasting_query
+  sql_template_path: "src/pipelines/components/preprocessing/bigquery_queries.sql" # Chemin dans le conteneur
   time_window:
-    end_date: "2023-11-22" # Date de fin souhaitée pour les données d'entraînement/test
-    max_data_points: 2950 
-data_preprocessing:
-  sql_template_path: "src/pipelines/components/preprocessing/bigquery_queries.sql"
-  time_window:
-    end_date_str: "2023-11-22" # End date for training data generation
-    max_data_points: 2950 # Max number of hours per series for training data
+    end_date_str: "2023-11-22" # Date de fin pour l'extraction des données historiques
+    max_data_points: 2950 # Max points historiques par série
 
+training: # Section pour les paramètres liés à l'entraînement (script train_xgboost_hpt.py)
+  time_column: "timestamp_hour"       # Correspond à 'train_time_column' dans le pipeline
+  target_column: "trip_count"         # Correspond à 'train_target_column' dans le pipeline
+  series_id_column: "pickup_community_area" # Correspond à 'train_series_id_column' dans le pipeline
+  worker_machine_type: "n1-standard-4" # Correspond à 'worker_machine_type' dans le pipeline
 
-custom_training:
-  # Static arguments passed to the training script (train_xgboost_hpt.py)
-  static_args:
-    time_column: "timestamp_hour"
-    target_column: "trip_count"
-    series_id_column: "pickup_community_area"
-    feature_columns: # List of features used by the model
-      - "hour"
-      - "day_of_week"
-      - "month"
-      - "year"
-      - "day_of_year"
-      - "week_of_year"
-      - "is_weekend"
-      - "hour_sin"
-      - "hour_cos"
-      - "pickup_community_area"
-      - "is_holiday" # Add if generated and used
-    train_ratio: 0.85 # Fraction for train/validation split within the script
+# Paramètres de haut niveau utilisés par le pipeline
+# (Placés ici pour correspondre à l'accès direct config.get(...) dans run_pipeline.py)
+enable_hpt: True # Mettre à True pour activer HPT
+train_end_date: "2023-10-01T00:00:00" # Correspond à 'train_end_date' dans le pipeline
+val_end_date: "2023-11-22T00:00:00"   # Correspond à 'val_end_date' dans le pipeline
+default_hyperparameters: # Correspond à 'default_hyperparameters' (utilisé si enable_hpt=False)
+  n_estimators: 100
+  learning_rate: 0.1
+  max_depth: 5
+  subsample: 0.8
+  colsample_bytree: 0.8
+  reg_lambda: 1.0 # Assurez-vous que tous les HPs par défaut nécessaires sont listés
 
-  # Worker pool specification for the training job (run by HPT)
-  worker_pool_spec:
-    machine_type: "n1-standard-4" # Machine type for training
-    # IMPORTANT: Replace with the URI of your custom training container image in Artifact Registry
-    container_uri: "europe-west1-docker.pkg.dev/your-project-id/your-repo-name/your-image-name:latest"
-    replica_count: 1 # Must be 1 for HPT master worker
+hpt: # Section pour les paramètres généraux HPT (passés à launch_hpt_job)
+  display_name_prefix: "xgboost-hpt-run" # Correspond à 'hpt_display_name_prefix'
+  metric_tag: "rmse"                     # Correspond à 'hpt_metric_tag'
+  metric_goal: "MINIMIZE"                # Correspond à 'hpt_metric_goal'
+  max_trial_count: 10                    # Correspond à 'hpt_max_trial_count'
+  parallel_trial_count: 2                # Correspond à 'hpt_parallel_trial_count'
+  search_algorithm: "RANDOM_SEARCH"      # Correspond à 'hpt_search_algorithm'
 
-hyperparameter_tuning:
-  display_name_prefix: "hpt_xgboost_taxi"
-  metric_tag: "rmse" # Metric reported by the training script
-  metric_goal: "MINIMIZE" # Goal for the metric (MINIMIZE or MAXIMIZE)
-  max_trial_count: 20 # Total number of trials
-  parallel_trial_count: 4 # Number of trials to run in parallel
-  search_algorithm: "DEFAULT" # "RANDOM_SEARCH", "GRID_SEARCH", "BAYESIAN_OPTIMIZATION"
+hpt_params: # Section pour les paramètres *spécifiques* à régler par HPT
+            # Correspond aux paramètres hpt_..._min/max/scale du pipeline
+  n_estimators:
+    min: 50
+    max: 500
+    scale: "UNIT_LINEAR_SCALE" # Doit être une valeur valide de l'enum hpt.ScaleType
+  learning_rate:
+    min: 0.01
+    max: 0.3
+    scale: "UNIT_LOG_SCALE"
+  max_depth:
+    min: 3
+    max: 10
+    scale: "UNIT_LINEAR_SCALE"
+  reg_lambda:
+    min: 0.1
+    max: 10.0
+    scale: "UNIT_LOG_SCALE"
+  # Ajoutez ici les sections pour d'autres HPs si vous en ajoutez au pipeline/composant
+  # subsample:
+  #   min: 0.5
+  #   max: 1.0
+  #   scale: "UNIT_LINEAR_SCALE"
+  # colsample_bytree:
+  #   min: 0.5
+  #   max: 1.0
+  #   scale: "UNIT_LINEAR_SCALE"
 
-  # Parameter specification for HPT
-  parameter_spec:
-    learning_rate:
-      parameter_id: "learning_rate"
-      type: "DOUBLE"
-      scale_type: "UNIT_LOG_SCALE"
-      min_value: 0.01
-      max_value: 0.3
-    n_estimators:
-      parameter_id: "n_estimators"
-      type: "INTEGER"
-      scale_type: "UNIT_LINEAR_SCALE"
-      min_value: 50
-      max_value: 500
-    max_depth:
-      parameter_id: "max_depth"
-      type: "INTEGER"
-      scale_type: "UNIT_LINEAR_SCALE"
-      min_value: 3
-      max_value: 10
-    subsample:
-      parameter_id: "subsample"
-      type: "DOUBLE"
-      scale_type: "UNIT_LINEAR_SCALE"
-      min_value: 0.5
-      max_value: 1.0
-    colsample_bytree:
-      parameter_id: "colsample_bytree"
-      type: "DOUBLE"
-      scale_type: "UNIT_LINEAR_SCALE"
-      min_value: 0.5
-      max_value: 1.0
-    reg_lambda:                   # Régularisation L2
-      parameter_id: "reg_lambda" 
-      type: "DOUBLE"
-      scale_type: "UNIT_LOG_SCALE" # Echelle log car effet sur ordres de grandeur
-      min_value: 0.1
-      max_value: 10.0
-batch_prediction:
-  job_display_name_prefix: "batch_pred_taxi"
-  # Optional: Specify machine type if needed, otherwise defaults are used
-  # machine_type: "n1-standard-4"
-  # Optional: Specify starting/max replica count if needed
-  # starting_replica_count: 1
-  # max_replica_count: 5
-  generate_explanation: false # Whether to generate explanations
+prediction: # Section pour les paramètres de génération des features futures et prédiction batch
+  gen_forecast_input_horizon_hours: 168 # Correspond à 'gen_forecast_input_horizon_hours'
+  gen_forecast_input_start_time: ""    # Correspond à 'gen_forecast_input_start_time'
+  batch_pred_output_suffix: "predictions/predictions.csv" # Correspond à 'batch_pred_output_suffix'
 
-# Optional: Model Registry configuration
-model_registry: 
-  model_display_name_prefix: "chicago_taxi_forecast_model"
-  # If the training script saves the model, specify the serving container
-  # serving_container_image_uri: "europe-west1-docker.pkg.dev/your-project-id/your-repo-name/your-serving-image:latest"
+evaluation: # Section pour les paramètres d'évaluation
+  eval_output_dir_suffix: "evaluation_output" # Correspond à 'eval_output_dir_suffix'
 
-# Optional: Parameters for generate_forecast_input.py if run separately or via KFP component
-forecast_input_generation:
-  horizon_hours: 24 # Number of future hours to generate input data for
-  forecast_start_time: "2023-11-22T00:00:00Z" # Start time for the forecast
-  forecast_horizon_hours: 24 # Number of hours to forecast
+pipeline: # Section pour les paramètres généraux du pipeline
+  activate_downstream_steps: True # Correspond à 'activate_downstream_steps'
+  enable_caching: False           # Utilisé par run_pipeline.py
 
-
-
-    # Vertex AI Forecast Model Parameters
-#vertex_ai_forecast:
-  #display_name: "chicago_taxi_forecast_model"
-  #optimization_objective: "minimize-rmse"
-  #budget_milli_node_hours: 1000    # ~1h d'entraînement
-  #column_transformations:
-    #timestamp_hour: "timestamp"
-    #pickup_community_area: "categorical"
-    #trip_count: "numeric"
-    #hour: "numeric"
-    #day_of_week: "categorical"
-    #month: "categorical"
-    #day_of_year: "numeric"
-    #is_weekend: "categorical"
-    #hour_sin: "numeric"
-    #hour_cos: "numeric"
-    #year: "numeric"
+# Sections optionnelles ou non utilisées par le script run_pipeline.py fourni
+# (gardées pour référence mais les accès devront être ajoutés si nécessaire)
+# forecasting: ...
+# custom_training: ... # Les clés statiques sont maintenant lues depuis 'training' et root
+# batch_prediction: ... # Seul le suffixe est lu actuellement
+# model_registry: ...

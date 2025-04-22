@@ -1,31 +1,29 @@
 # Core libraries
-pandas>=1.3.0,<2.0.0
-numpy>=1.20.0,<2.0.0
-pyarrow>=7.0.0 # Often needed by pandas for certain formats or BQ interaction
-db-dtypes>=1.0.0 # Required by pandas read_gbq for certain BigQuery types
+pandas>=1.5.0,<2.0.0
+numpy==1.23.5 # Pinned version to avoid binary incompatibility
+pyarrow>=10.0.0 # Souvent nécessaire pour pandas<->bigquery
+db-dtypes>=1.0.0 # Pour BigQuery datatypes avec pandas_gbq
+pandas-gbq>=0.19.0 # Utilisé dans fallback_bq.py
 
 # Machine Learning
-xgboost>=1.5.0,<2.0.0
-scikit-learn>=1.0.0,<1.2.0 # For splitting, metrics
+xgboost>=1.7.0,<2.0.0
+scikit-learn>=1.1.0
 
 # Google Cloud
-google-cloud-aiplatform>=1.18.1,<1.30.0 # For Vertex AI HPT Job and Pipelines
-google-cloud-bigquery>=2.34.0,<3.5.0 # For BigQuery interaction
-google-cloud-storage>=2.0.0,<3.0.0 # Often needed implicitly by AI Platform
-google-cloud-bigquery-storage>=2.10.0,<3.0.0 # For faster BQ downloads
+google-cloud-aiplatform==1.47.0 # Pinned version
+google-cloud-bigquery==3.18.0   # Pinned version
+google-cloud-storage==2.16.0    # Pinned version
 
-# Kubeflow Pipelines (if compiling/running pipeline from same environment)
-# kfp>=1.8.10,<2.0.0 # Use kfp v1 syntax based on the pipeline code
-kfp==1.8.22 # Pinning a specific version known to work well
+# Kubeflow Pipelines / Vertex AI Pipelines
+kfp==2.4.0                      # Pinned version (adjusted for compatibility)
+google-cloud-pipeline-components==2.7.0 # Explicitly add and pin
 
 # Utilities
-pyyaml>=6.0 # For reading config.yaml
-hypertune>=1.0.0 # For reporting metrics to Vertex AI HPT
-holidays>=0.13 # For generating holiday features
+pyyaml>=6.0
+hypertune>=1.0.0 # Pour Vertex AI HPT
+# holidays>=0.13 # Décommenter si le calcul des jours fériés est réactivé
 
-# Visualization (Optional - useful for notebooks/local runs, not strictly needed in Docker for training)
- matplotlib>=3.5.0
- seaborn>=0.11.0
- plotly>=5.5.0
-
-# Add other specific dependencies if needed
+# Visualization (Utilisé dans certains composants/notebooks)
+matplotlib>=3.5.0
+# seaborn # Décommentez si utilisé directement dans un composant
+# plotly # Décommentez si utilisé directement dans un composant

@@ -1,0 +1,1102 @@
+{
+  "components": {
+    "comp-batch-predict-xgboost": {
+      "executorLabel": "exec-batch-predict-xgboost",
+      "inputDefinitions": {
+        "artifacts": {
+          "features_gcs_path": {
+            "artifactType": {
+              "schemaTitle": "system.Dataset",
+              "schemaVersion": "0.0.1"
+            },
+            "description": "GCS URI of the input features CSV file."
+          },
+          "model_gcs_path": {
+            "artifactType": {
+              "schemaTitle": "system.Model",
+              "schemaVersion": "0.0.1"
+            },
+            "description": "GCS URI of the trained model file."
+          }
+        },
+        "parameters": {
+          "id_col": {
+            "description": "Name of the series identifier column in the features file.",
+            "parameterType": "STRING"
+          },
+          "output_gcs_path": {
+            "description": "GCS URI where the predictions CSV will be saved.",
+            "parameterType": "STRING"
+          },
+          "time_col": {
+            "description": "Name of the timestamp column in the features file.",
+            "parameterType": "STRING"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "artifacts": {
+          "predictions": {
+            "artifactType": {
+              "schemaTitle": "system.Dataset",
+              "schemaVersion": "0.0.1"
+            }
+          }
+        }
+      }
+    },
+    "comp-condition-1": {
+      "dag": {
+        "tasks": {
+          "batch-predict-xgboost": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-batch-predict-xgboost"
+            },
+            "dependentTasks": [
+              "generate-forecast-input"
+            ],
+            "inputs": {
+              "artifacts": {
+                "features_gcs_path": {
+                  "taskOutputArtifact": {
+                    "outputArtifactKey": "future_features",
+                    "producerTask": "generate-forecast-input"
+                  }
+                },
+                "model_gcs_path": {
+                  "componentInputArtifact": "pipelinechannel--launch-hpt-job-model_gcs_path"
+                }
+              },
+              "parameters": {
+                "id_col": {
+                  "componentInputParameter": "pipelinechannel--train_series_id_column"
+                },
+                "output_gcs_path": {
+                  "runtimeValue": {
+                    "constant": "{{$.inputs.parameters['pipelinechannel--staging_bucket']}}/{{$.inputs.parameters['pipelinechannel--batch_pred_output_suffix']}}"
+                  }
+                },
+                "pipelinechannel--batch_pred_output_suffix": {
+                  "componentInputParameter": "pipelinechannel--batch_pred_output_suffix"
+                },
+                "pipelinechannel--staging_bucket": {
+                  "componentInputParameter": "pipelinechannel--staging_bucket"
+                },
+                "time_col": {
+                  "componentInputParameter": "pipelinechannel--train_time_column"
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "Batch Predict"
+            }
+          },
+          "evaluate-visualize-predictions": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-evaluate-visualize-predictions"
+            },
+            "dependentTasks": [
+              "batch-predict-xgboost"
+            ],
+            "inputs": {
+              "artifacts": {
+                "actuals_bq_table_uri": {
+                  "componentInputArtifact": "pipelinechannel--run-bq-forecasting-query-destination_table_uri"
+                },
+                "predictions_gcs_path": {
+                  "taskOutputArtifact": {
+                    "outputArtifactKey": "predictions",
+                    "producerTask": "batch-predict-xgboost"
+                  }
+                }
+              },
+              "parameters": {
+                "actuals_id_col": {
+                  "componentInputParameter": "pipelinechannel--train_series_id_column"
+                },
+                "actuals_target_col": {
+                  "componentInputParameter": "pipelinechannel--train_target_column"
+                },
+                "actuals_time_col": {
+                  "componentInputParameter": "pipelinechannel--train_time_column"
+                },
+                "output_dir": {
+                  "runtimeValue": {
+                    "constant": "{{$.inputs.parameters['pipelinechannel--staging_bucket']}}/{{$.inputs.parameters['pipelinechannel--eval_output_dir_suffix']}}"
+                  }
+                },
+                "pipelinechannel--eval_output_dir_suffix": {
+                  "componentInputParameter": "pipelinechannel--eval_output_dir_suffix"
+                },
+                "pipelinechannel--staging_bucket": {
+                  "componentInputParameter": "pipelinechannel--staging_bucket"
+                },
+                "pred_id_col": {
+                  "componentInputParameter": "pipelinechannel--train_series_id_column"
+                },
+                "pred_time_col": {
+                  "componentInputParameter": "pipelinechannel--train_time_column"
+                },
+                "pred_value_col": {
+                  "runtimeValue": {
+                    "constant": "prediction"
+                  }
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "Evaluate Predictions"
+            }
+          },
+          "generate-forecast-input": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-generate-forecast-input"
+            },
+            "inputs": {
+              "artifacts": {
+                "bq_table_prepared_path": {
+                  "componentInputArtifact": "pipelinechannel--run-bq-forecasting-query-destination_table_name_out"
+                }
+              },
+              "parameters": {
+                "bq_dataset": {
+                  "componentInputParameter": "pipelinechannel--bq_dataset_id"
+                },
+                "forecast_horizon_hours": {
+                  "componentInputParameter": "pipelinechannel--gen_forecast_input_horizon_hours"
+                },
+                "forecast_start_time": {
+                  "componentInputParameter": "pipelinechannel--gen_forecast_input_start_time"
+                },
+                "id_col": {
+                  "componentInputParameter": "pipelinechannel--train_series_id_column"
+                },
+                "output_gcs_path": {
+                  "runtimeValue": {
+                    "constant": "{{$.inputs.parameters['pipelinechannel--staging_bucket']}}/features/future_features.csv"
+                  }
+                },
+                "pipelinechannel--staging_bucket": {
+                  "componentInputParameter": "pipelinechannel--staging_bucket"
+                },
+                "project_id": {
+                  "componentInputParameter": "pipelinechannel--project"
+                },
+                "time_col": {
+                  "componentInputParameter": "pipelinechannel--train_time_column"
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "Generate Future Features"
+            }
+          }
+        }
+      },
+      "inputDefinitions": {
+        "artifacts": {
+          "pipelinechannel--launch-hpt-job-model_gcs_path": {
+            "artifactType": {
+              "schemaTitle": "system.Model",
+              "schemaVersion": "0.0.1"
+            }
+          },
+          "pipelinechannel--run-bq-forecasting-query-destination_table_name_out": {
+            "artifactType": {
+              "schemaTitle": "system.Artifact",
+              "schemaVersion": "0.0.1"
+            }
+          },
+          "pipelinechannel--run-bq-forecasting-query-destination_table_uri": {
+            "artifactType": {
+              "schemaTitle": "system.Artifact",
+              "schemaVersion": "0.0.1"
+            }
+          }
+        },
+        "parameters": {
+          "pipelinechannel--activate_downstream_steps": {
+            "parameterType": "BOOLEAN"
+          },
+          "pipelinechannel--batch_pred_output_suffix": {
+            "parameterType": "STRING"
+          },
+          "pipelinechannel--bq_dataset_id": {
+            "parameterType": "STRING"
+          },
+          "pipelinechannel--eval_output_dir_suffix": {
+            "parameterType": "STRING"
+          },
+          "pipelinechannel--gen_forecast_input_horizon_hours": {
+            "parameterType": "NUMBER_INTEGER"
+          },
+          "pipelinechannel--gen_forecast_input_start_time": {
+            "parameterType": "STRING"
+          },
+          "pipelinechannel--project": {
+            "parameterType": "STRING"
+          },
+          "pipelinechannel--staging_bucket": {
+            "parameterType": "STRING"
+          },
+          "pipelinechannel--train_series_id_column": {
+            "parameterType": "STRING"
+          },
+          "pipelinechannel--train_target_column": {
+            "parameterType": "STRING"
+          },
+          "pipelinechannel--train_time_column": {
+            "parameterType": "STRING"
+          }
+        }
+      }
+    },
+    "comp-evaluate-visualize-predictions": {
+      "executorLabel": "exec-evaluate-visualize-predictions",
+      "inputDefinitions": {
+        "artifacts": {
+          "actuals_bq_table_uri": {
+            "artifactType": {
+              "schemaTitle": "system.Artifact",
+              "schemaVersion": "0.0.1"
+            },
+            "description": "BigQuery URI of the table containing actual values."
+          },
+          "predictions_gcs_path": {
+            "artifactType": {
+              "schemaTitle": "system.Dataset",
+              "schemaVersion": "0.0.1"
+            },
+            "description": "GCS URI of the predictions CSV file."
+          }
+        },
+        "parameters": {
+          "actuals_id_col": {
+            "description": "Name of the series ID column in the actuals BQ table.",
+            "parameterType": "STRING"
+          },
+          "actuals_target_col": {
+            "description": "Name of the target value column in the actuals BQ table.",
+            "parameterType": "STRING"
+          },
+          "actuals_time_col": {
+            "description": "Name of the timestamp column in the actuals BQ table.",
+            "parameterType": "STRING"
+          },
+          "output_dir": {
+            "description": "GCS directory URI to save generated artifacts (like plots).",
+            "parameterType": "STRING"
+          },
+          "pred_id_col": {
+            "description": "Name of the series ID column in the predictions CSV.",
+            "parameterType": "STRING"
+          },
+          "pred_time_col": {
+            "description": "Name of the timestamp column in the predictions CSV.",
+            "parameterType": "STRING"
+          },
+          "pred_value_col": {
+            "description": "Name of the predicted value column in the predictions CSV.",
+            "parameterType": "STRING"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "artifacts": {
+          "html_artifact": {
+            "artifactType": {
+              "schemaTitle": "system.HTML",
+              "schemaVersion": "0.0.1"
+            }
+          },
+          "metrics": {
+            "artifactType": {
+              "schemaTitle": "system.Metrics",
+              "schemaVersion": "0.0.1"
+            }
+          }
+        }
+      }
+    },
+    "comp-generate-forecast-input": {
+      "executorLabel": "exec-generate-forecast-input",
+      "inputDefinitions": {
+        "artifacts": {
+          "bq_table_prepared_path": {
+            "artifactType": {
+              "schemaTitle": "system.Artifact",
+              "schemaVersion": "0.0.1"
+            }
+          }
+        },
+        "parameters": {
+          "bq_dataset": {
+            "parameterType": "STRING"
+          },
+          "forecast_horizon_hours": {
+            "parameterType": "NUMBER_INTEGER"
+          },
+          "forecast_start_time": {
+            "parameterType": "STRING"
+          },
+          "id_col": {
+            "parameterType": "STRING"
+          },
+          "output_gcs_path": {
+            "parameterType": "STRING"
+          },
+          "project_id": {
+            "parameterType": "STRING"
+          },
+          "time_col": {
+            "parameterType": "STRING"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "artifacts": {
+          "future_features": {
+            "artifactType": {
+              "schemaTitle": "system.Dataset",
+              "schemaVersion": "0.0.1"
+            }
+          }
+        }
+      }
+    },
+    "comp-launch-hpt-job": {
+      "executorLabel": "exec-launch-hpt-job",
+      "inputDefinitions": {
+        "artifacts": {
+          "bq_table_name_path": {
+            "artifactType": {
+              "schemaTitle": "system.Artifact",
+              "schemaVersion": "0.0.1"
+            }
+          }
+        },
+        "parameters": {
+          "default_hyperparameters": {
+            "parameterType": "STRUCT"
+          },
+          "display_name_prefix": {
+            "parameterType": "STRING"
+          },
+          "enable_hpt": {
+            "parameterType": "BOOLEAN"
+          },
+          "hpt_learning_rate_max": {
+            "parameterType": "NUMBER_DOUBLE"
+          },
+          "hpt_learning_rate_min": {
+            "parameterType": "NUMBER_DOUBLE"
+          },
+          "hpt_learning_rate_scale": {
+            "parameterType": "STRING"
+          },
+          "hpt_max_depth_max": {
+            "parameterType": "NUMBER_INTEGER"
+          },
+          "hpt_max_depth_min": {
+            "parameterType": "NUMBER_INTEGER"
+          },
+          "hpt_max_depth_scale": {
+            "parameterType": "STRING"
+          },
+          "hpt_max_trial_count": {
+            "parameterType": "NUMBER_INTEGER"
+          },
+          "hpt_metric_goal": {
+            "parameterType": "STRING"
+          },
+          "hpt_metric_tag": {
+            "parameterType": "STRING"
+          },
+          "hpt_n_estimators_max": {
+            "parameterType": "NUMBER_INTEGER"
+          },
+          "hpt_n_estimators_min": {
+            "parameterType": "NUMBER_INTEGER"
+          },
+          "hpt_n_estimators_scale": {
+            "parameterType": "STRING"
+          },
+          "hpt_parallel_trial_count": {
+            "parameterType": "NUMBER_INTEGER"
+          },
+          "hpt_reg_lambda_max": {
+            "parameterType": "NUMBER_DOUBLE"
+          },
+          "hpt_reg_lambda_min": {
+            "parameterType": "NUMBER_DOUBLE"
+          },
+          "hpt_reg_lambda_scale": {
+            "parameterType": "STRING"
+          },
+          "hpt_search_algorithm": {
+            "parameterType": "STRING"
+          },
+          "location": {
+            "parameterType": "STRING"
+          },
+          "project": {
+            "parameterType": "STRING"
+          },
+          "staging_bucket": {
+            "parameterType": "STRING"
+          },
+          "static_args": {
+            "parameterType": "STRUCT"
+          },
+          "worker_pool_spec": {
+            "parameterType": "STRUCT"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "artifacts": {
+          "model_gcs_path": {
+            "artifactType": {
+              "schemaTitle": "system.Model",
+              "schemaVersion": "0.0.1"
+            }
+          }
+        },
+        "parameters": {
+          "best_rmse": {
+            "parameterType": "NUMBER_DOUBLE"
+          },
+          "best_trial_id": {
+            "parameterType": "STRING"
+          }
+        }
+      }
+    },
+    "comp-run-bq-forecasting-query": {
+      "executorLabel": "exec-run-bq-forecasting-query",
+      "inputDefinitions": {
+        "parameters": {
+          "dataset_id": {
+            "description": "ID du dataset BigQuery pour la table de destination.",
+            "parameterType": "STRING"
+          },
+          "destination_table_name": {
+            "description": "Nom de la table de destination BigQuery (sans projet/dataset).",
+            "parameterType": "STRING"
+          },
+          "end_date_str": {
+            "description": "Date de fin pour l'extraction des donn\u00e9es (YYYY-MM-DD).",
+            "parameterType": "STRING"
+          },
+          "location": {
+            "description": "Localisation BigQuery (ex: 'US', 'EU').",
+            "parameterType": "STRING"
+          },
+          "max_data_points": {
+            "description": "Nombre maximum d'heures (points de donn\u00e9es) par s\u00e9rie \u00e0 inclure avant end_date.",
+            "parameterType": "NUMBER_INTEGER"
+          },
+          "project_id": {
+            "description": "ID du projet GCP.",
+            "parameterType": "STRING"
+          },
+          "source_table": {
+            "description": "ID complet de la table source BigQuery (ex: projet.dataset.table).",
+            "parameterType": "STRING"
+          },
+          "sql_template_path_in_container": {
+            "description": "Chemin vers le fichier template .sql dans le conteneur.",
+            "parameterType": "STRING"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "artifacts": {
+          "destination_table_name_out": {
+            "artifactType": {
+              "schemaTitle": "system.Artifact",
+              "schemaVersion": "0.0.1"
+            }
+          },
+          "destination_table_uri": {
+            "artifactType": {
+              "schemaTitle": "system.Artifact",
+              "schemaVersion": "0.0.1"
+            }
+          }
+        }
+      }
+    }
+  },
+  "deploymentSpec": {
+    "executors": {
+      "exec-batch-predict-xgboost": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "batch_predict_xgboost"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef batch_predict_xgboost(\n    model_gcs_path: Input[Model], # Changed from str to Input[Model]\n    features_gcs_path: Input[Dataset], # Changed from str to Input[Dataset]\n    output_gcs_path: str, # GCS URI for the output predictions CSV\n    id_col: str, # Name of the ID column in the features CSV\n    time_col: str, # Name of the time column in the features CSV\n    predictions: Output[Dataset] # Output artifact for predictions CSV URI\n):\n    \"\"\"\n    KFP component wrapper to run the batch prediction script.\n\n    Invokes xgboost_batch_predict.py script within the container, passing\n    necessary GCS paths and column names.\n\n    Args:\n        model_gcs_path: GCS URI of the trained model file.\n        features_gcs_path: GCS URI of the input features CSV file.\n        output_gcs_path: GCS URI where the predictions CSV will be saved.\n        id_col: Name of the series identifier column in the features file.\n        time_col: Name of the timestamp column in the features file.\n        predictions: Output artifact to store the URI of the predictions CSV.\n    \"\"\"\n    # Imports moved inside\n    import subprocess\n    import logging # Import again if needed inside, or use module logger\n\n    # Path to the prediction script inside the container\n    # Ensure this path is correct based on your Dockerfile WORKDIR and COPY commands\n    script_path = \"/app/src/pipelines/components/predictions/xgboost_batch_predict.py\"\n\n    cmd = [\n        \"python\", script_path,\n        \"--model_gcs_path\", model_gcs_path.uri, # Use .uri here\n        \"--features_gcs_path\", features_gcs_path.uri, # Use .uri here\n        \"--output_gcs_path\", output_gcs_path,\n        \"--id_col\", id_col, # Pass id_col\n        \"--time_col\", time_col, # Pass time_col\n    ]\n\n    logging.info(f\"Running prediction script with command: {' '.join(cmd)}\")\n    try:\n        # Run the script as a subprocess\n        process = subprocess.run(cmd, check=True, capture_output=True, text=True)\n        logging.info(\"Prediction script stdout:\")\n        logging.info(process.stdout)\n        logging.info(\"Prediction script stderr:\")\n        logging.info(process.stderr)\n        logging.info(\"Prediction script finished successfully.\")\n    except subprocess.CalledProcessError as e:\n        logging.error(f\"Prediction script failed with exit code {e.returncode}\")\n        logging.error(\"Script stdout:\")\n        logging.error(e.stdout)\n        logging.error(\"Script stderr:\")\n        logging.error(e.stderr)\n        raise RuntimeError(\"Batch prediction script failed.\") from e\n    except FileNotFoundError:\n        logging.error(f\"Prediction script not found at {script_path}. Check path and Docker image.\")\n        raise\n    except Exception as e:\n        logging.error(f\"An unexpected error occurred while running the prediction script: {e}\")\n        raise\n\n    # Set the output artifact URI\n    predictions.uri = output_gcs_path\n    logging.info(f\"Output predictions artifact URI set to: {predictions.uri}\")\n\n"
+          ],
+          "image": "europe-west1-docker.pkg.dev/avisia-certification-ml-yde/chicago-taxis-demo/forecasting-pipeline:latest"
+        }
+      },
+      "exec-evaluate-visualize-predictions": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "evaluate_visualize_predictions"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef evaluate_visualize_predictions(\n    predictions_gcs_path: Input[Dataset], # Changed from str to Input[Dataset]\n    actuals_bq_table_uri: Input[Artifact], # Changed from str to Input[Artifact]\n    output_dir: str, # GCS directory path for saving outputs (e.g., gs://bucket/prefix/)\n    # --- Column Name Parameters ---\n    actuals_time_col: str, # Name of timestamp column in actuals BQ table\n    actuals_id_col: str,   # Name of series ID column in actuals BQ table\n    actuals_target_col: str, # Name of target value column in actuals BQ table\n    pred_time_col: str,    # Name of timestamp column in predictions CSV\n    pred_id_col: str,      # Name of series ID column in predictions CSV\n    pred_value_col: str,   # Name of predicted value column in predictions CSV\n    # --- KFP Outputs ---\n    metrics: Output[Metrics],\n    html_artifact: Output[HTML]\n):\n    \"\"\"\n    Compares predictions from a GCS CSV file to actual values from a BigQuery table.\n\n    Calculates evaluation metrics (MAE, RMSE, MAPE) and generates a visualization\n    comparing predictions and actuals for a sample series. Outputs KFP Metrics\n    and an HTML artifact containing the results and plot.\n\n    Args:\n        predictions_gcs_path: GCS URI of the predictions CSV file.\n        actuals_bq_table_uri: BigQuery URI of the table containing actual values.\n        output_dir: GCS directory URI to save generated artifacts (like plots).\n        actuals_time_col: Name of the timestamp column in the actuals BQ table.\n        actuals_id_col: Name of the series ID column in the actuals BQ table.\n        actuals_target_col: Name of the target value column in the actuals BQ table.\n        pred_time_col: Name of the timestamp column in the predictions CSV.\n        pred_id_col: Name of the series ID column in the predictions CSV.\n        pred_value_col: Name of the predicted value column in the predictions CSV.\n        metrics: KFP Output[Metrics] artifact.\n        html_artifact: KFP Output[HTML] artifact.\n    \"\"\"\n    # Imports moved inside\n    import pandas as pd\n    from google.cloud import bigquery\n    import logging # Import again if needed\n    import os\n    import matplotlib.pyplot as plt\n    import base64\n    from google.cloud import storage\n    from sklearn.metrics import mean_absolute_error, mean_squared_error\n    import numpy as np # Import numpy for MAPE calculation\n\n    # Assuming visualization is available in the PYTHONPATH within the container\n    try:\n        from src.visualization import plot_prediction_vs_actual # Corrected import path\n    except ImportError:\n        logging.error(\"Could not import visualization function. Ensure src/visualization.py exists.\")\n        plot_prediction_vs_actual = None # Set to None if import fails\n\n    # --- Validate Inputs ---\n    if not predictions_gcs_path.uri.startswith(\"gs://\"):\n        raise ValueError(f\"predictions_gcs_path must be a GCS URI (gs://...), got: {predictions_gcs_path.uri}\") # Use .uri\n    if not actuals_bq_table_uri.uri.startswith(\"bq://\"): # Use .uri\n        raise ValueError(f\"actuals_bq_table_uri must start with bq://, got: {actuals_bq_table_uri.uri}\") # Use .uri\n    if not output_dir.startswith(\"gs://\"):\n        raise ValueError(f\"output_dir must be a GCS URI (gs://...), got: {output_dir}\")\n\n    # --- 1. Load Predictions from GCS ---\n    logging.info(f\"Loading predictions from: {predictions_gcs_path.uri}\") # Use .uri\n    try:\n        df_pred = pd.read_csv(predictions_gcs_path.uri) # Use .uri\n        logging.info(f\"Loaded {len(df_pred)} predictions.\")\n        # Convert time columns to datetime\n        df_pred[pred_time_col] = pd.to_datetime(df_pred[pred_time_col])\n    except Exception as e:\n        logging.error(f\"Failed to load predictions CSV from {predictions_gcs_path.uri}: {e}\") # Use .uri\n        raise\n\n    # --- 2. Load Actuals from BigQuery ---\n    logging.info(f\"Loading actuals from BQ table: {actuals_bq_table_uri.uri}\") # Use .uri\n    try:\n        bq_table_id = actuals_bq_table_uri.uri[5:] # Use .uri, Remove bq:// prefix\n        client = bigquery.Client()\n        # Construct query carefully, selecting only necessary columns and filtering by prediction time range\n        min_pred_time = df_pred[pred_time_col].min()\n        max_pred_time = df_pred[pred_time_col].max()\n        logging.info(f\"Querying actuals between {min_pred_time} and {max_pred_time}\")\n\n        query = f\"\"\"\n            SELECT\n                `{actuals_time_col}`,\n                `{actuals_id_col}`,\n                `{actuals_target_col}`\n            FROM `{bq_table_id}`\n            WHERE `{actuals_time_col}` >= TIMESTAMP(\"{min_pred_time.strftime('%Y-%m-%d %H:%M:%S')}\")\n              AND `{actuals_time_col}` <= TIMESTAMP(\"{max_pred_time.strftime('%Y-%m-%d %H:%M:%S')}\")\n        \"\"\"\n        logging.info(f\"Executing BQ query: {query[:200]}...\") # Log start of query\n        df_actual = client.query(query).to_dataframe()\n        logging.info(f\"Actuals loaded from BQ. Shape: {df_actual.shape}. Columns: {df_actual.columns.tolist()}\")\n        # Ensure required actuals columns exist\n        if actuals_time_col not in df_actual.columns: raise ValueError(f\"Missing actuals time column '{actuals_time_col}'\")\n        if actuals_id_col not in df_actual.columns: raise ValueError(f\"Missing actuals ID column '{actuals_id_col}'\")\n        if actuals_target_col not in df_actual.columns: raise ValueError(f\"Missing actuals target column '{actuals_target_col}'\")\n        # Convert time column to datetime\n        df_actual[actuals_time_col] = pd.to_datetime(df_actual[actuals_time_col])\n    except Exception as e:\n        logging.error(f\"Failed to load or parse actuals from BigQuery: {e}\")\n        raise\n\n    # --- Merge Predictions and Actuals ---\n    logging.info(\"Merging predictions and actuals...\")\n    try:\n        # Rename columns for consistent merging\n        df_pred_renamed = df_pred.rename(columns={\n            pred_time_col: 'timestamp',\n            pred_id_col: 'series_id',\n            pred_value_col: 'prediction'\n        })\n        df_actual_renamed = df_actual.rename(columns={\n            actuals_time_col: 'timestamp',\n            actuals_id_col: 'series_id',\n            actuals_target_col: 'actual'\n        })\n\n        # Ensure merge keys have compatible types (already converted time, check ID type)\n        if df_pred_renamed['series_id'].dtype != df_actual_renamed['series_id'].dtype:\n            logging.warning(f\"Merge key 'series_id' has different dtypes: Pred={df_pred_renamed['series_id'].dtype}, Actual={df_actual_renamed['series_id'].dtype}. Attempting conversion.\")\n            try:\n                # Attempt to convert actuals ID to prediction ID type (often safer)\n                df_actual_renamed['series_id'] = df_actual_renamed['series_id'].astype(df_pred_renamed['series_id'].dtype)\n            except Exception as cast_e:\n                logging.error(f\"Failed to cast series_id columns for merging: {cast_e}\")\n                raise ValueError(\"Cannot merge due to incompatible series_id types.\")\n\n\n        merge_keys = ['timestamp', 'series_id']\n        df_merged = pd.merge(\n            df_pred_renamed[[*merge_keys, 'prediction']],\n            df_actual_renamed[[*merge_keys, 'actual']],\n            on=merge_keys,\n            how='inner' # Use inner join to evaluate only where both exist\n        )\n        logging.info(f\"Merged data shape: {df_merged.shape}\")\n\n        if df_merged.empty:\n            logging.warning(\"Merged dataframe is empty. No matching data found between predictions and actuals for the specified time range.\")\n            # Log dummy metrics and write basic HTML\n            metrics.log_metric(\"mae\", float('nan'))\n            metrics.log_metric(\"rmse\", float('nan'))\n            metrics.log_metric(\"mape\", float('nan'))\n            with open(html_artifact.path, \"w\") as f:\n                f.write(\"<h2>Forecast Evaluation</h2><p>Error: No matching data found between predictions and actuals.</p>\")\n            logging.info(\"Logged NaN metrics and basic HTML due to empty merge.\")\n            return # Exit component gracefully\n\n    except Exception as e:\n        logging.error(f\"Failed during merge operation: {e}\")\n        raise\n\n    # --- Compute Metrics ---\n    logging.info(\"Computing evaluation metrics...\")\n    try:\n        mae = mean_absolute_error(df_merged['actual'], df_merged['prediction'])\n        rmse = mean_squared_error(df_merged['actual'], df_merged['prediction'], squared=False)\n\n        # Calculate MAPE carefully, avoiding division by zero\n        mask = df_merged['actual'] != 0\n        if mask.sum() > 0:\n            mape = np.mean(np.abs((df_merged.loc[mask, 'actual'] - df_merged.loc[mask, 'prediction']) / df_merged.loc[mask, 'actual'])) * 100 # As percentage\n        else:\n            mape = float('inf') if df_merged['prediction'].abs().sum() > 0 else 0.0 # If actuals are all 0, MAPE is inf if preds are non-zero, else 0\n\n        logging.info(f\"MAE: {mae:.4f}, RMSE: {rmse:.4f}, MAPE: {mape:.4f}%\")\n\n        # Log metrics to KFP\n        metrics.log_metric(\"mae\", float(mae))\n        metrics.log_metric(\"rmse\", float(rmse))\n        metrics.log_metric(\"mape\", float(mape)) # Log MAPE percentage\n\n    except Exception as e:\n        logging.error(f\"Failed to compute metrics: {e}\")\n        # Log dummy metrics on error? Or let pipeline fail? Let's log NaNs.\n        metrics.log_metric(\"mae\", float('nan'))\n        metrics.log_metric(\"rmse\", float('nan'))\n        metrics.log_metric(\"mape\", float('nan'))\n        raise # Re-raise exception to signal failure\n\n    # --- Generate Plot ---\n    plot_path_gcs = None\n    img_str = None\n    if plot_prediction_vs_actual is not None:\n        logging.info(\"Generating prediction vs actual plot...\")\n        try:\n            # Use the renamed columns for plotting\n            # The function expects 'pickup_community_area', 'timestamp', 'target_actual', 'prediction'\n            # We need to adapt the function or pass the correct columns\n            # Let's assume the function can be adapted or we pass the right df\n            plot_df = df_merged.rename(columns={\n                'series_id': actuals_id_col, # Rename back for the plot function if it expects original name\n                'actual': 'target_actual' # Rename for the plot function\n            })\n\n            # Select a sample series ID for plotting if multiple exist\n            sample_series_id = plot_df[actuals_id_col].unique()[0]\n            plot_df_sample = plot_df[plot_df[actuals_id_col] == sample_series_id]\n            logging.info(f\"Plotting sample series ID: {sample_series_id}\")\n\n            fig = plot_prediction_vs_actual(plot_df_sample) # Pass the sample dataframe\n\n            # Save plot locally first\n            local_fig_path = \"/tmp/prediction_vs_actual.png\"\n            os.makedirs(os.path.dirname(local_fig_path), exist_ok=True)\n            fig.savefig(local_fig_path)\n            plt.close(fig) # Close the figure to free memory\n            logging.info(f\"Plot saved locally to {local_fig_path}\")\n\n            # Upload plot to GCS output directory\n            storage_client = storage.Client()\n            bucket_name, blob_prefix = output_dir.replace(\"gs://\", \"\").split('/', 1)\n            # Ensure blob_prefix ends with / if it's a directory path\n            if blob_prefix and not blob_prefix.endswith('/'):\n                blob_prefix += '/'\n            blob_path = f\"{blob_prefix}prediction_vs_actual.png\"\n            bucket = storage_client.bucket(bucket_name)\n            blob = bucket.blob(blob_path)\n\n            logging.info(f\"Uploading plot to GCS: gs://{bucket_name}/{blob_path}\")\n            blob.upload_from_filename(local_fig_path)\n            plot_path_gcs = f\"gs://{bucket_name}/{blob_path}\"\n            logging.info(\"Plot uploaded successfully.\")\n\n            # Encode image for embedding in HTML\n            with open(local_fig_path, \"rb\") as img_file:\n                img_str = base64.b64encode(img_file.read()).decode('utf-8')\n\n        except Exception as e:\n            logging.error(f\"Failed to generate or upload plot: {e}\")\n            # Continue without plot if it fails\n    else:\n        logging.warning(\"Plotting function not available. Skipping plot generation.\")\n\n\n    # --- Create HTML Artifact ---\n    logging.info(\"Generating HTML artifact...\")\n    html_content = f\"\"\"\n    <html>\n    <head><title>Forecast Evaluation</title></head>\n    <body>\n    <h1>Forecast Evaluation Metrics</h1>\n    <ul>\n        <li>Mean Absolute Error (MAE): {mae:.4f}</li>\n        <li>Root Mean Squared Error (RMSE): {rmse:.4f}</li>\n        <li>Mean Absolute Percentage Error (MAPE): {mape:.4f}%</li>\n    </ul>\n    \"\"\"\n\n    if img_str:\n        html_content += f\"\"\"\n        <h2>Prediction vs Actual (Sample Series: {sample_series_id})</h2>\n        <img src='data:image/png;base64,{img_str}' alt='Prediction vs Actual Plot'>\n        <p>Full plot available at: <a href='{plot_path_gcs}' target='_blank'>{plot_path_gcs}</a></p>\n        \"\"\"\n    elif plot_path_gcs: # If upload succeeded but embedding failed\n         html_content += f\"\"\"\n        <h2>Prediction vs Actual Plot</h2>\n        <p>Plot available at: <a href='{plot_path_gcs}' target='_blank'>{plot_path_gcs}</a></p>\n        \"\"\"\n    else:\n         html_content += \"<p>Plot generation failed or was skipped.</p>\"\n\n\n    html_content += \"\"\"\n    </body>\n    </html>\n    \"\"\"\n\n    try:\n        with open(html_artifact.path, \"w\") as f:\n            f.write(html_content)\n        logging.info(f\"HTML artifact saved to {html_artifact.path}\")\n    except Exception as e:\n        logging.error(f\"Failed to write HTML artifact: {e}\")\n        # Don't raise here, pipeline succeeded in metrics calculation\n\n    logging.info(\"Evaluation component finished.\")\n\n"
+          ],
+          "image": "europe-west1-docker.pkg.dev/avisia-certification-ml-yde/chicago-taxis-demo/forecasting-pipeline:latest"
+        }
+      },
+      "exec-generate-forecast-input": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "generate_forecast_input"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef generate_forecast_input(\n    project_id: str,\n    bq_dataset: str,\n    # --- MODIFICATION : Utiliser Input[Artifact] ---\n    bq_table_prepared_path: Input[Artifact], # Input Artifact pointant vers le fichier\n    id_col: str,\n    time_col: str,\n    forecast_horizon_hours: int,\n    forecast_start_time: str,\n    output_gcs_path: str,\n    future_features: Output[Dataset]\n):\n    \"\"\"\n    Composant KFP pour g\u00e9n\u00e9rer les features pour les pr\u00e9dictions futures.\n    Lit le nom de la table BQ pr\u00e9par\u00e9e depuis un fichier d'artefact d'entr\u00e9e.\n    \"\"\"\n    import logging\n\n    # Appeler la fonction d'impl\u00e9mentation avec le chemin du fichier .path de l'artefact\n    _generate_forecast_input_impl(\n        project_id=project_id,\n        bq_dataset=bq_dataset,\n        bq_table_prepared_path=bq_table_prepared_path.path, # Passer le chemin .path\n        id_col=id_col,\n        time_col=time_col,\n        forecast_horizon_hours=forecast_horizon_hours,\n        forecast_start_time=forecast_start_time,\n        output_gcs_path=output_gcs_path\n    )\n    # D\u00e9finir l'URI pour l'artefact de sortie (reste identique)\n    future_features.uri = output_gcs_path\n    logging.info(f\"Component finished. Output artifact URI: {future_features.uri}\")\n\n"
+          ],
+          "image": "europe-west1-docker.pkg.dev/avisia-certification-ml-yde/chicago-taxis-demo/forecasting-pipeline:latest"
+        }
+      },
+      "exec-launch-hpt-job": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "launch_hpt_job"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef launch_hpt_job(\n    project: str,\n    location: str,\n    staging_bucket: str,\n    display_name_prefix: str,\n    worker_pool_spec: Dict, # OK\n    enable_hpt: bool, # OK\n    # --- MODIFICATION : Supprimer hpt_config ---\n    # hpt_config: Dict, # SUPPRIM\u00c9\n    default_hyperparameters: Dict[str, Any], # OK\n    bq_table_name_path: Input[Artifact], # OK\n    static_args: Dict, # OK (sans bq_table initialement)\n    model_gcs_path: Output[Model], # OK\n\n    # --- MODIFICATION : Ajouter les param\u00e8tres simples pour HPT ---\n    hpt_metric_tag: str,\n    hpt_metric_goal: str,\n    hpt_max_trial_count: int,\n    hpt_parallel_trial_count: int,\n    hpt_search_algorithm: str,\n    # Param\u00e8tres pour n_estimators\n    hpt_n_estimators_min: int,\n    hpt_n_estimators_max: int,\n    hpt_n_estimators_scale: str,\n    # Param\u00e8tres pour learning_rate\n    hpt_learning_rate_min: float,\n    hpt_learning_rate_max: float,\n    hpt_learning_rate_scale: str,\n    # Param\u00e8tres pour max_depth\n    hpt_max_depth_min: int,\n    hpt_max_depth_max: int,\n    hpt_max_depth_scale: str,\n    # Param\u00e8tres pour reg_lambda\n    hpt_reg_lambda_min: float,\n    hpt_reg_lambda_max: float,\n    hpt_reg_lambda_scale: str,\n    # Ajouter d'autres ici...\n\n) -> NamedTuple(\"Outputs\", [(\"best_trial_id\", str), (\"best_rmse\", float)]):\n    \"\"\"\n    Lance un job Vertex AI HPT ou CustomJob.\n    Reconstruit la sp\u00e9cification des param\u00e8tres HPT \u00e0 partir d'arguments simples.\n    [...]\n    Args:\n        [...]\n        # hpt_config: SUPPRIM\u00c9\n        default_hyperparameters: Dictionnaire des HPs par d\u00e9faut (si HPT d\u00e9sactiv\u00e9).\n        bq_table_name_path: Artefact d'entr\u00e9e contenant le nom de la table BQ.\n        static_args: Arguments statiques pour le script d'entra\u00eenement (excluant bq_table).\n        model_gcs_path: Artefact de sortie pour l'URI du mod\u00e8le.\n        hpt_metric_tag: Tag de la m\u00e9trique HPT.\n        hpt_metric_goal: Objectif HPT (MINIMIZE/MAXIMIZE).\n        hpt_max_trial_count: Nombre max d'essais.\n        hpt_parallel_trial_count: Nombre d'essais parall\u00e8les.\n        hpt_search_algorithm: Algorithme de recherche HPT.\n        hpt_n_estimators_min: Borne min pour n_estimators.\n        hpt_n_estimators_max: Borne max pour n_estimators.\n        hpt_n_estimators_scale: \u00c9chelle pour n_estimators.\n        # ... (autres param\u00e8tres HPT simples) ...\n    Returns:\n        NamedTuple contenant best_trial_id et best_rmse.\n    \"\"\"\n    # Imports internes\n    from google.cloud import aiplatform\n    from google.cloud.aiplatform import hyperparameter_tuning as hpt\n    import time\n    from collections import namedtuple\n    import json # Garder json pour analyse potentielle d'args si n\u00e9cessaire\n    import logging\n\n    Outputs = namedtuple(\"Outputs\", [\"best_trial_id\", \"best_rmse\"])\n\n    aiplatform.init(project=project, location=location, staging_bucket=staging_bucket)\n    timestamp = time.strftime(\"%Y%m%d%H%M%S\")\n    display_name = f\"{display_name_prefix}-{timestamp}\"\n    best_trial_id_out = \"N/A\"\n    best_rmse_out = float('nan')\n    model_uri = None\n\n    # Lire le nom de la table depuis le fichier d'artefact (logique identique)\n    try:\n        with open(bq_table_name_path.path, 'r') as f:\n            bq_table_name_str = f.read().strip()\n        if not bq_table_name_str: raise ValueError(\"Fichier nom table vide.\")\n        logging.info(f\"Nom table BQ lu: '{bq_table_name_str}'\")\n    except Exception as read_e:\n        logging.error(f\"Erreur lecture nom table depuis {bq_table_name_path.path}: {read_e}\")\n        raise RuntimeError(f\"Impossible lire nom table BQ: {read_e}\") from read_e\n\n    # Ajouter le nom lu aux arguments statiques (logique identique)\n    current_static_args = static_args.copy()\n    current_static_args['bq_table'] = bq_table_name_str\n    base_args_list = [f\"--{key}={value}\" for key, value in current_static_args.items()]\n    logging.info(f\"Args statiques base pour script train: {base_args_list}\")\n\n    # R\u00e9pertoire de sortie (logique identique)\n    base_output_dir = f\"{staging_bucket}/{display_name}\"\n    logging.info(f\"R\u00e9pertoire sortie base job: {base_output_dir}\")\n\n    if enable_hpt:\n        logging.info(\"Hyperparameter Tuning activ\u00e9. Configuration du job HPT...\")\n        script_args = base_args_list + [\"--hpt_enabled=True\"]\n\n        # Pr\u00e9parer worker_pool (logique identique)\n        worker_pool = [\n            {\"machine_spec\": {\"machine_type\": worker_pool_spec[\"machine_type\"]},\n             \"replica_count\": 1,\n             \"container_spec\": {\"image_uri\": worker_pool_spec[\"container_uri\"], \"args\": script_args,},\n            }\n        ]\n        logging.info(f\"Worker pool spec: {worker_pool}\")\n\n        # --- MODIFICATION : Reconstruire study_spec_params \u00e0 partir des args simples ---\n        study_spec_params = []\n        logging.info(\"Reconstruction de HPT parameter spec \u00e0 partir des arguments simples...\")\n\n        # n_estimators (Integer)\n        try: # Utiliser try/except pour robustesse des conversions d'\u00e9chelle\n            scale_n_est = getattr(hpt.ScaleType, hpt_n_estimators_scale, hpt.ScaleType.UNIT_LINEAR_SCALE)\n            study_spec_params.append(hpt.IntegerParameterSpec(\n                parameter_id='n_estimators', min_value=hpt_n_estimators_min, max_value=hpt_n_estimators_max, scale_type=scale_n_est\n            ))\n            logging.info(f\"Ajout\u00e9 spec pour n_estimators ({hpt_n_estimators_min}-{hpt_n_estimators_max}, scale={hpt_n_estimators_scale})\")\n        except AttributeError: logging.warning(f\"\u00c9chelle invalide '{hpt_n_estimators_scale}' pour n_estimators. Utilisation de UNIT_LINEAR_SCALE.\")\n        except Exception as e: logging.error(f\"Erreur construction spec n_estimators: {e}\")\n\n        # learning_rate (Double)\n        try:\n            scale_lr = getattr(hpt.ScaleType, hpt_learning_rate_scale, hpt.ScaleType.UNIT_LINEAR_SCALE)\n            study_spec_params.append(hpt.DoubleParameterSpec(\n                parameter_id='learning_rate', min_value=hpt_learning_rate_min, max_value=hpt_learning_rate_max, scale_type=scale_lr\n            ))\n            logging.info(f\"Ajout\u00e9 spec pour learning_rate ({hpt_learning_rate_min}-{hpt_learning_rate_max}, scale={hpt_learning_rate_scale})\")\n        except AttributeError: logging.warning(f\"\u00c9chelle invalide '{hpt_learning_rate_scale}' pour learning_rate. Utilisation de UNIT_LINEAR_SCALE.\")\n        except Exception as e: logging.error(f\"Erreur construction spec learning_rate: {e}\")\n\n        # max_depth (Integer)\n        try:\n            scale_depth = getattr(hpt.ScaleType, hpt_max_depth_scale, hpt.ScaleType.UNIT_LINEAR_SCALE)\n            study_spec_params.append(hpt.IntegerParameterSpec(\n                parameter_id='max_depth', min_value=hpt_max_depth_min, max_value=hpt_max_depth_max, scale_type=scale_depth\n            ))\n            logging.info(f\"Ajout\u00e9 spec pour max_depth ({hpt_max_depth_min}-{hpt_max_depth_max}, scale={hpt_max_depth_scale})\")\n        except AttributeError: logging.warning(f\"\u00c9chelle invalide '{hpt_max_depth_scale}' pour max_depth. Utilisation de UNIT_LINEAR_SCALE.\")\n        except Exception as e: logging.error(f\"Erreur construction spec max_depth: {e}\")\n\n        # reg_lambda (Double)\n        try:\n            scale_lambda = getattr(hpt.ScaleType, hpt_reg_lambda_scale, hpt.ScaleType.UNIT_LINEAR_SCALE)\n            study_spec_params.append(hpt.DoubleParameterSpec(\n                parameter_id='reg_lambda', min_value=hpt_reg_lambda_min, max_value=hpt_reg_lambda_max, scale_type=scale_lambda\n            ))\n            logging.info(f\"Ajout\u00e9 spec pour reg_lambda ({hpt_reg_lambda_min}-{hpt_reg_lambda_max}, scale={hpt_reg_lambda_scale})\")\n        except AttributeError: logging.warning(f\"\u00c9chelle invalide '{hpt_reg_lambda_scale}' pour reg_lambda. Utilisation de UNIT_LINEAR_SCALE.\")\n        except Exception as e: logging.error(f\"Erreur construction spec reg_lambda: {e}\")\n\n        # Ajouter la logique pour d'autres hyperparam\u00e8tres ici si n\u00e9cessaire...\n\n        logging.info(f\"Param\u00e8tres study spec reconstruits : {study_spec_params}\")\n        # --- Fin de la reconstruction ---\n\n        # V\u00e9rifier si study_spec_params est vide (si toutes les constructions ont \u00e9chou\u00e9)\n        if not study_spec_params:\n             raise ValueError(\"Aucun param\u00e8tre HPT valide n'a pu \u00eatre construit \u00e0 partir des entr\u00e9es fournies.\")\n\n        # Lancer le job HPT en utilisant les specs reconstruites\n        hpt_job = aiplatform.HyperparameterTuningJob(\n            display_name=display_name,\n            custom_job=aiplatform.CustomJob(\n                display_name=display_name + \"_trial-base\",\n                worker_pool_specs=worker_pool,\n                base_output_directory=base_output_dir,\n            ),\n            # Utiliser les param\u00e8tres simples directement pour la config g\u00e9n\u00e9rale\n            metric_spec={hpt_metric_tag: hpt_metric_goal},\n            parameter_spec=study_spec_params, # Utiliser la liste reconstruite\n            max_trial_count=hpt_max_trial_count,\n            parallel_trial_count=hpt_parallel_trial_count,\n            search_algorithm=hpt_search_algorithm,\n        )\n\n        logging.info(f\"Lancement du job HPT {display_name}...\")\n        # ... (Reste du code HPT : run, refresh, find best trial, model_uri) ...\n        hpt_job.run(sync=True)\n        logging.info(f\"Job HPT {hpt_job.resource_name} termin\u00e9.\")\n        hpt_job.refresh()\n\n        valid_trials = [t for t in hpt_job.trials if t.state == aiplatform.gapic.Trial.State.SUCCEEDED and t.final_measurement]\n        if not valid_trials: raise RuntimeError(\"Aucun essai HPT r\u00e9ussi.\")\n        logging.info(f\"Trouv\u00e9 {len(valid_trials)} essais r\u00e9ussis.\")\n        try:\n            if hpt_metric_goal == \"MAXIMIZE\": best_trial = max(valid_trials, key=lambda t: t.final_measurement.metrics[0].value)\n            else: best_trial = min(valid_trials, key=lambda t: t.final_measurement.metrics[0].value)\n        except (IndexError, KeyError): raise RuntimeError(\"\u00c9chec d\u00e9termination meilleur essai (m\u00e9trique manquante).\")\n\n        best_trial_id_out = best_trial.id\n        best_rmse_out = best_trial.final_measurement.metrics[0].value\n        logging.info(f\"Meilleur essai: ID={best_trial_id_out}, M\u00e9trique ({hpt_metric_tag}): {best_rmse_out}\")\n        model_uri = f\"{base_output_dir}/{best_trial.id}/model/model.joblib\"\n        logging.info(f\"URI meilleur mod\u00e8le: {model_uri}\")\n\n\n    else: # Cas Custom Job simple (non HPT)\n        logging.info(\"Hyperparameter Tuning d\u00e9sactiv\u00e9. Lancement Custom Job unique...\")\n        # Utiliser base_args_list mis \u00e0 jour\n        script_args = base_args_list + [\"--hpt_enabled=False\"]\n        # Ajouter les HPs par d\u00e9faut (ceux d\u00e9finis dans le pipeline et pass\u00e9s via default_hyperparameters)\n        for key, value in default_hyperparameters.items():\n            script_args.append(f\"--{key}={value}\")\n        logging.info(f\"Args script pour Custom Job: {script_args}\")\n\n        # Pr\u00e9parer worker_pool (logique identique)\n        worker_pool = [\n            {\"machine_spec\": {\"machine_type\": worker_pool_spec[\"machine_type\"]},\n             \"replica_count\": 1,\n             \"container_spec\": {\"image_uri\": worker_pool_spec[\"container_uri\"], \"args\": script_args},\n            }\n        ]\n        # D\u00e9finir et lancer Custom Job (logique identique)\n        custom_job = aiplatform.CustomJob(display_name=display_name, worker_pool_specs=worker_pool)\n        logging.info(f\"Lancement Custom Job {display_name}...\")\n        custom_job.run(sync=True)\n        logging.info(f\"Custom Job {custom_job.resource_name} termin\u00e9.\")\n        custom_job.refresh()\n        job_output_dir = custom_job.gca_resource.job_spec.base_output_directory.output_uri_prefix\n        model_uri = f\"{job_output_dir}/model/model.joblib\"\n        logging.info(f\"URI mod\u00e8le pour Custom Job: {model_uri}\")\n\n\n    # \u00c9crire l'URI du mod\u00e8le (logique identique)\n    if model_uri is None:\n         raise RuntimeError(\"\u00c9chec d\u00e9termination URI mod\u00e8le apr\u00e8s job entra\u00eenement.\")\n    logging.info(f\"URI final meilleur mod\u00e8le : {model_uri}\")\n    model_gcs_path.uri = model_uri\n\n    # Retourner infos meilleur essai (logique identique)\n    return Outputs(best_trial_id_out, best_rmse_out)\n\n"
+          ],
+          "image": "europe-west1-docker.pkg.dev/avisia-certification-ml-yde/chicago-taxis-demo/forecasting-pipeline:latest"
+        }
+      },
+      "exec-run-bq-forecasting-query": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "run_bq_forecasting_query"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef run_bq_forecasting_query(\n    project_id: str,\n    location: str,\n    dataset_id: str,\n    source_table: str,\n    destination_table_name: str, # Le nom d'entr\u00e9e reste le m\u00eame\n    sql_template_path_in_container: str,\n    end_date_str: str,\n    max_data_points: int,\n    destination_table_uri: Output[Artifact], # Conserver ce param\u00e8tre Artifact\n    destination_table_name_out: Output[Artifact], # Conserver ce param\u00e8tre Artifact\n): # --- MODIFICATION : Annotation de retour supprim\u00e9e ---\n    \"\"\"\n    Ex\u00e9cute une requ\u00eate BigQuery (d\u00e9finie dans un template SQL) pour pr\u00e9parer les donn\u00e9es de forecasting.\n\n    Lit un template SQL, le formate avec les param\u00e8tres fournis (dates, tables),\n    ex\u00e9cute la requ\u00eate pour cr\u00e9er ou remplacer une table de destination dans BigQuery.\n    Inclut un m\u00e9canisme de secours utilisant Pandas si la requ\u00eate BQ \u00e9choue.\n\n    Args:\n        project_id: ID du projet GCP.\n        location: Localisation BigQuery (ex: 'US', 'EU').\n        dataset_id: ID du dataset BigQuery pour la table de destination.\n        source_table: ID complet de la table source BigQuery (ex: projet.dataset.table).\n        destination_table_name: Nom de la table de destination BigQuery (sans projet/dataset).\n        sql_template_path_in_container: Chemin vers le fichier template .sql dans le conteneur.\n        end_date_str: Date de fin pour l'extraction des donn\u00e9es (YYYY-MM-DD).\n        max_data_points: Nombre maximum d'heures (points de donn\u00e9es) par s\u00e9rie \u00e0 inclure avant end_date.\n        destination_table_uri: Artefact de sortie pour stocker l'URI BQ de la table cr\u00e9\u00e9e.\n        # destination_table_name_out: SUPPRIM\u00c9\n\n    Raises:\n        RuntimeError: Si la pr\u00e9paration des donn\u00e9es \u00e9choue apr\u00e8s tentative BQ et fallback Pandas.\n        FileNotFoundError: Si le fichier template SQL n'est pas trouv\u00e9.\n        ValueError: Si les param\u00e8tres d'entr\u00e9e (comme la date) sont invalides.\n        Exception: Pour d'autres erreurs inattendues.\n\n    Returns:\n        DataPrepOutputs: Un NamedTuple contenant :\n            destination_table_name_str: Le nom simple (string) de la table cr\u00e9\u00e9e.\n    \"\"\"\n    # Imports n\u00e9cessaires (restent les m\u00eames)\n    from datetime import timedelta, datetime\n    from google.cloud import bigquery\n    from google.cloud.exceptions import NotFound\n    import google.api_core.exceptions\n    import pandas as pd\n    import logging\n    import os\n\n    # Import de la fonction fallback (reste le m\u00eame)\n    process_data_with_pandas = None\n    try:\n        from src.pipelines.components.preprocessing.fallback_bq import process_data_with_pandas\n        logging.info(\"Fonction fallback 'process_data_with_pandas' import\u00e9e avec succ\u00e8s.\")\n    except ImportError:\n        logging.error(\"Impossible d'importer 'process_data_with_pandas' depuis fallback_bq. Le fallback ne sera pas disponible.\")\n\n    # --- Validation et Pr\u00e9paration des Param\u00e8tres --- (reste le m\u00eame)\n    try:\n        end_date = datetime.strptime(end_date_str, \"%Y-%m-%d\")\n    except ValueError:\n        logging.error(f\"Format invalide pour end_date_str: {end_date_str}. Attendu : YYYY-MM-DD.\")\n        raise\n\n    start_date = end_date - timedelta(hours=max_data_points - 1)\n    start_date_str_calc = start_date.strftime(\"%Y-%m-%d\")\n    hours_diff = max_data_points\n\n    if hours_diff > 3000:\n        logging.warning(f\"Les {hours_diff} points demand\u00e9s d\u00e9passent la limite Vertex AI (3000). Ajustement de la date de d\u00e9but.\")\n        start_date = end_date - timedelta(hours=2999)\n        start_date_str_calc = start_date.strftime(\"%Y-%m-%d\")\n        hours_diff = 3000\n    else:\n        logging.info(f\"Plage de donn\u00e9es (~{hours_diff} heures) respecte la limite Vertex AI.\")\n\n    start_timestamp_str = f\"{start_date_str_calc} 00:00:00\"\n    end_timestamp_str = f\"{end_date_str} 23:59:59\"\n    logging.info(\"--- Plage Temporelle des Donn\u00e9es ---\")\n    logging.info(f\"  Timestamp D\u00e9but: {start_timestamp_str}\")\n    logging.info(f\"  Timestamp Fin  : {end_timestamp_str}\")\n\n    # --- Lecture du Template SQL --- (reste le m\u00eame)\n    logging.info(f\"Lecture du template SQL depuis : {sql_template_path_in_container}\")\n    try:\n        with open(sql_template_path_in_container, 'r') as f:\n            sql_template_content = f.read()\n        logging.info(\"Lecture du template SQL r\u00e9ussie.\")\n    except FileNotFoundError:\n        logging.error(f\"Fichier template SQL non trouv\u00e9 : {sql_template_path_in_container}\")\n        raise\n    except Exception as e:\n        logging.error(f\"Erreur lors de la lecture du fichier template SQL : {e}\")\n        raise\n\n    # --- Initialisation et Tentatives de Pr\u00e9paration --- (reste le m\u00eame)\n    client = bigquery.Client(project=project_id, location=location)\n    export_success = False\n    final_destination_table_id = f\"{project_id}.{dataset_id}.{destination_table_name}\"\n\n    # --- M\u00c9THODE 1 : Requ\u00eate BigQuery Directe --- (reste le m\u00eame)\n    try:\n        logging.info(f\"M\u00e9thode 1: Tentative d'ex\u00e9cution de la requ\u00eate BigQuery (Source: {source_table}, Dest: {final_destination_table_id})\")\n        sql_formatted = sql_template_content.format(\n            PROJECT_ID=project_id, BQ_DATASET=dataset_id, BQ_TABLE_PREPARED=destination_table_name,\n            SOURCE_TABLE=source_table, start_timestamp_str=start_timestamp_str, end_timestamp_str=end_timestamp_str\n        )\n        logging.info(\"Requ\u00eate SQL format\u00e9e (d\u00e9but) : \" + sql_formatted[:200].replace('\\n', ' ') + \"...\")\n        logging.info(\"Ex\u00e9cution de la requ\u00eate SQL format\u00e9e...\")\n        query_job = client.query(sql_formatted)\n        query_job.result()\n        logging.info(f\"M\u00e9thode 1: Requ\u00eate BigQuery ex\u00e9cut\u00e9e avec succ\u00e8s. Donn\u00e9es \u00e9crites dans {final_destination_table_id}\")\n        export_success = True\n\n    except Exception as e:\n        logging.warning(f\"M\u00e9thode 1: \u00c9chec de la requ\u00eate BigQuery : {e}\")\n\n        # --- M\u00c9THODE 2 : Fallback avec Pandas --- (reste le m\u00eame)\n        logging.info(\"--- Tentative M\u00e9thode 2: Fallback avec Pandas ---\")\n        if process_data_with_pandas is None:\n             logging.error(\"Fonction fallback 'process_data_with_pandas' non disponible. Impossible de continuer.\")\n        else:\n            try:\n                logging.info(f\"M\u00e9thode 2: Appel de process_data_with_pandas pour exporter vers {final_destination_table_id}\")\n                processed_df_fallback = process_data_with_pandas(\n                    df_raw=None,\n                    start_timestamp_str=start_timestamp_str,\n                    end_timestamp_str=end_timestamp_str,\n                    PROJECT_ID=project_id,\n                    source_table=source_table,\n                    dataset_id=dataset_id,\n                    destination_table_name=destination_table_name\n                )\n                logging.info(f\"M\u00e9thode 2: La fonction fallback process_data_with_pandas s'est termin\u00e9e avec succ\u00e8s.\")\n                export_success = True\n\n            except Exception as fallback_e:\n                logging.error(f\"M\u00e9thode 2: \u00c9chec critique pendant l'ex\u00e9cution du fallback Pandas : {fallback_e}\")\n                traceback.print_exc()\n\n # --- Sortie Finale du Composant ---\n    if export_success:\n        logging.info(f\"Pr\u00e9paration des donn\u00e9es r\u00e9ussie. Table de sortie : {final_destination_table_id}\")\n\n        # D\u00e9finir l'artefact de sortie (URI BQ) - reste le m\u00eame\n        destination_table_uri.uri = f\"bq://{final_destination_table_id}\"\n        logging.info(f\"URI de l'artefact de sortie : {destination_table_uri.uri}\")\n\n        # --- MODIFICATION : \u00c9crire le nom de la table dans le fichier de sortie ---\n        # Utiliser destination_table_name_out.path qui est fourni par KFP\n        try:\n            output_file_path = destination_table_name_out.path\n            logging.info(f\"\u00c9criture du nom de la table '{destination_table_name}' dans le fichier de sortie : {output_file_path}\")\n            # S'assurer que le r\u00e9pertoire existe (normalement KFP le g\u00e8re)\n            os.makedirs(os.path.dirname(output_file_path), exist_ok=True)\n            with open(output_file_path, 'w') as f:\n                f.write(destination_table_name)\n            logging.info(\"\u00c9criture du nom de la table dans le fichier r\u00e9ussie.\")\n        except Exception as write_e:\n            logging.error(f\"ERREUR CRITIQUE: \u00c9chec de l'\u00e9criture du nom de table dans le fichier de sortie {destination_table_name_out.path}: {write_e}\")\n            # Lever une erreur pour faire \u00e9chouer la t\u00e2che KFP si l'\u00e9criture \u00e9choue\n            raise RuntimeError(f\"\u00c9chec de l'\u00e9criture du nom de table dans le fichier : {write_e}\") from write_e\n\n        # Pas de 'return' ici car les sorties sont g\u00e9r\u00e9es par les param\u00e8tres Output[...]\n\n    else:\n        # Cas o\u00f9 ni la M\u00e9thode 1 ni la M\u00e9thode 2 n'ont r\u00e9ussi\n        logging.error(\"La pr\u00e9paration des donn\u00e9es a \u00e9chou\u00e9 globalement. Aucune m\u00e9thode n'a r\u00e9ussi.\")\n        # Lever une exception pour signaler l'\u00e9chec au pipeline KFP\n        raise RuntimeError(\"La pr\u00e9paration des donn\u00e9es a \u00e9chou\u00e9.\")\n\n"
+          ],
+          "image": "europe-west1-docker.pkg.dev/avisia-certification-ml-yde/chicago-taxis-demo/forecasting-pipeline:latest"
+        }
+      }
+    }
+  },
+  "pipelineInfo": {
+    "description": "Pipeline de forecasting avec entra\u00eenement XGBoost (HPT simplifi\u00e9)",
+    "name": "chicago-taxi-forecasting-pipeline-v2"
+  },
+  "root": {
+    "dag": {
+      "tasks": {
+        "condition-1": {
+          "componentRef": {
+            "name": "comp-condition-1"
+          },
+          "dependentTasks": [
+            "launch-hpt-job",
+            "run-bq-forecasting-query"
+          ],
+          "inputs": {
+            "artifacts": {
+              "pipelinechannel--launch-hpt-job-model_gcs_path": {
+                "taskOutputArtifact": {
+                  "outputArtifactKey": "model_gcs_path",
+                  "producerTask": "launch-hpt-job"
+                }
+              },
+              "pipelinechannel--run-bq-forecasting-query-destination_table_name_out": {
+                "taskOutputArtifact": {
+                  "outputArtifactKey": "destination_table_name_out",
+                  "producerTask": "run-bq-forecasting-query"
+                }
+              },
+              "pipelinechannel--run-bq-forecasting-query-destination_table_uri": {
+                "taskOutputArtifact": {
+                  "outputArtifactKey": "destination_table_uri",
+                  "producerTask": "run-bq-forecasting-query"
+                }
+              }
+            },
+            "parameters": {
+              "pipelinechannel--activate_downstream_steps": {
+                "componentInputParameter": "activate_downstream_steps"
+              },
+              "pipelinechannel--batch_pred_output_suffix": {
+                "componentInputParameter": "batch_pred_output_suffix"
+              },
+              "pipelinechannel--bq_dataset_id": {
+                "componentInputParameter": "bq_dataset_id"
+              },
+              "pipelinechannel--eval_output_dir_suffix": {
+                "componentInputParameter": "eval_output_dir_suffix"
+              },
+              "pipelinechannel--gen_forecast_input_horizon_hours": {
+                "componentInputParameter": "gen_forecast_input_horizon_hours"
+              },
+              "pipelinechannel--gen_forecast_input_start_time": {
+                "componentInputParameter": "gen_forecast_input_start_time"
+              },
+              "pipelinechannel--project": {
+                "componentInputParameter": "project"
+              },
+              "pipelinechannel--staging_bucket": {
+                "componentInputParameter": "staging_bucket"
+              },
+              "pipelinechannel--train_series_id_column": {
+                "componentInputParameter": "train_series_id_column"
+              },
+              "pipelinechannel--train_target_column": {
+                "componentInputParameter": "train_target_column"
+              },
+              "pipelinechannel--train_time_column": {
+                "componentInputParameter": "train_time_column"
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "downstream-steps"
+          },
+          "triggerPolicy": {
+            "condition": "inputs.parameter_values['pipelinechannel--activate_downstream_steps'] == true"
+          }
+        },
+        "launch-hpt-job": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-launch-hpt-job"
+          },
+          "dependentTasks": [
+            "run-bq-forecasting-query"
+          ],
+          "inputs": {
+            "artifacts": {
+              "bq_table_name_path": {
+                "taskOutputArtifact": {
+                  "outputArtifactKey": "destination_table_name_out",
+                  "producerTask": "run-bq-forecasting-query"
+                }
+              }
+            },
+            "parameters": {
+              "default_hyperparameters": {
+                "componentInputParameter": "default_hyperparameters"
+              },
+              "display_name_prefix": {
+                "componentInputParameter": "hpt_display_name_prefix"
+              },
+              "enable_hpt": {
+                "componentInputParameter": "enable_hpt"
+              },
+              "hpt_learning_rate_max": {
+                "componentInputParameter": "hpt_learning_rate_max"
+              },
+              "hpt_learning_rate_min": {
+                "componentInputParameter": "hpt_learning_rate_min"
+              },
+              "hpt_learning_rate_scale": {
+                "componentInputParameter": "hpt_learning_rate_scale"
+              },
+              "hpt_max_depth_max": {
+                "componentInputParameter": "hpt_max_depth_max"
+              },
+              "hpt_max_depth_min": {
+                "componentInputParameter": "hpt_max_depth_min"
+              },
+              "hpt_max_depth_scale": {
+                "componentInputParameter": "hpt_max_depth_scale"
+              },
+              "hpt_max_trial_count": {
+                "componentInputParameter": "hpt_max_trial_count"
+              },
+              "hpt_metric_goal": {
+                "componentInputParameter": "hpt_metric_goal"
+              },
+              "hpt_metric_tag": {
+                "componentInputParameter": "hpt_metric_tag"
+              },
+              "hpt_n_estimators_max": {
+                "componentInputParameter": "hpt_n_estimators_max"
+              },
+              "hpt_n_estimators_min": {
+                "componentInputParameter": "hpt_n_estimators_min"
+              },
+              "hpt_n_estimators_scale": {
+                "componentInputParameter": "hpt_n_estimators_scale"
+              },
+              "hpt_parallel_trial_count": {
+                "componentInputParameter": "hpt_parallel_trial_count"
+              },
+              "hpt_reg_lambda_max": {
+                "componentInputParameter": "hpt_reg_lambda_max"
+              },
+              "hpt_reg_lambda_min": {
+                "componentInputParameter": "hpt_reg_lambda_min"
+              },
+              "hpt_reg_lambda_scale": {
+                "componentInputParameter": "hpt_reg_lambda_scale"
+              },
+              "hpt_search_algorithm": {
+                "componentInputParameter": "hpt_search_algorithm"
+              },
+              "location": {
+                "componentInputParameter": "location"
+              },
+              "pipelinechannel--bq_dataset_id": {
+                "componentInputParameter": "bq_dataset_id"
+              },
+              "pipelinechannel--location": {
+                "componentInputParameter": "location"
+              },
+              "pipelinechannel--project": {
+                "componentInputParameter": "project"
+              },
+              "pipelinechannel--train_end_date": {
+                "componentInputParameter": "train_end_date"
+              },
+              "pipelinechannel--train_series_id_column": {
+                "componentInputParameter": "train_series_id_column"
+              },
+              "pipelinechannel--train_target_column": {
+                "componentInputParameter": "train_target_column"
+              },
+              "pipelinechannel--train_time_column": {
+                "componentInputParameter": "train_time_column"
+              },
+              "pipelinechannel--val_end_date": {
+                "componentInputParameter": "val_end_date"
+              },
+              "pipelinechannel--worker_container_uri": {
+                "componentInputParameter": "worker_container_uri"
+              },
+              "pipelinechannel--worker_machine_type": {
+                "componentInputParameter": "worker_machine_type"
+              },
+              "project": {
+                "componentInputParameter": "project"
+              },
+              "staging_bucket": {
+                "componentInputParameter": "staging_bucket"
+              },
+              "static_args": {
+                "runtimeValue": {
+                  "constant": {
+                    "bq_dataset": "{{$.inputs.parameters['pipelinechannel--bq_dataset_id']}}",
+                    "id_col": "{{$.inputs.parameters['pipelinechannel--train_series_id_column']}}",
+                    "location": "{{$.inputs.parameters['pipelinechannel--location']}}",
+                    "project_id": "{{$.inputs.parameters['pipelinechannel--project']}}",
+                    "target_col": "{{$.inputs.parameters['pipelinechannel--train_target_column']}}",
+                    "time_col": "{{$.inputs.parameters['pipelinechannel--train_time_column']}}",
+                    "train_end_date": "{{$.inputs.parameters['pipelinechannel--train_end_date']}}",
+                    "val_end_date": "{{$.inputs.parameters['pipelinechannel--val_end_date']}}"
+                  }
+                }
+              },
+              "worker_pool_spec": {
+                "runtimeValue": {
+                  "constant": {
+                    "container_uri": "{{$.inputs.parameters['pipelinechannel--worker_container_uri']}}",
+                    "machine_type": "{{$.inputs.parameters['pipelinechannel--worker_machine_type']}}"
+                  }
+                }
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "Launch Training Job (HPT/Custom)"
+          }
+        },
+        "run-bq-forecasting-query": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-run-bq-forecasting-query"
+          },
+          "inputs": {
+            "parameters": {
+              "dataset_id": {
+                "componentInputParameter": "bq_dataset_id"
+              },
+              "destination_table_name": {
+                "componentInputParameter": "bq_train_table_name"
+              },
+              "end_date_str": {
+                "componentInputParameter": "sql_end_date_str"
+              },
+              "location": {
+                "componentInputParameter": "location"
+              },
+              "max_data_points": {
+                "componentInputParameter": "sql_max_data_points"
+              },
+              "project_id": {
+                "componentInputParameter": "project"
+              },
+              "source_table": {
+                "componentInputParameter": "bq_source_table"
+              },
+              "sql_template_path_in_container": {
+                "componentInputParameter": "sql_query_path"
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "Prepare Training Data BQ"
+          }
+        }
+      }
+    },
+    "inputDefinitions": {
+      "parameters": {
+        "activate_downstream_steps": {
+          "defaultValue": true,
+          "isOptional": true,
+          "parameterType": "BOOLEAN"
+        },
+        "batch_pred_output_suffix": {
+          "defaultValue": "predictions/predictions.csv",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "bq_dataset_id": {
+          "parameterType": "STRING"
+        },
+        "bq_source_table": {
+          "parameterType": "STRING"
+        },
+        "bq_train_table_name": {
+          "parameterType": "STRING"
+        },
+        "default_hyperparameters": {
+          "defaultValue": {
+            "colsample_bytree": 0.8,
+            "learning_rate": 0.1,
+            "max_depth": 5.0,
+            "n_estimators": 100.0,
+            "reg_lambda": 1.0,
+            "subsample": 0.8
+          },
+          "isOptional": true,
+          "parameterType": "STRUCT"
+        },
+        "enable_hpt": {
+          "defaultValue": true,
+          "isOptional": true,
+          "parameterType": "BOOLEAN"
+        },
+        "eval_output_dir_suffix": {
+          "defaultValue": "evaluation_output",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "gen_forecast_input_horizon_hours": {
+          "defaultValue": 168.0,
+          "isOptional": true,
+          "parameterType": "NUMBER_INTEGER"
+        },
+        "gen_forecast_input_start_time": {
+          "defaultValue": "",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "hpt_display_name_prefix": {
+          "defaultValue": "xgboost-hpt",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "hpt_learning_rate_max": {
+          "defaultValue": 0.3,
+          "isOptional": true,
+          "parameterType": "NUMBER_DOUBLE"
+        },
+        "hpt_learning_rate_min": {
+          "defaultValue": 0.01,
+          "isOptional": true,
+          "parameterType": "NUMBER_DOUBLE"
+        },
+        "hpt_learning_rate_scale": {
+          "defaultValue": "UNIT_LOG_SCALE",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "hpt_max_depth_max": {
+          "defaultValue": 10.0,
+          "isOptional": true,
+          "parameterType": "NUMBER_INTEGER"
+        },
+        "hpt_max_depth_min": {
+          "defaultValue": 3.0,
+          "isOptional": true,
+          "parameterType": "NUMBER_INTEGER"
+        },
+        "hpt_max_depth_scale": {
+          "defaultValue": "UNIT_LINEAR_SCALE",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "hpt_max_trial_count": {
+          "defaultValue": 10.0,
+          "isOptional": true,
+          "parameterType": "NUMBER_INTEGER"
+        },
+        "hpt_metric_goal": {
+          "defaultValue": "MINIMIZE",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "hpt_metric_tag": {
+          "defaultValue": "rmse",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "hpt_n_estimators_max": {
+          "defaultValue": 500.0,
+          "isOptional": true,
+          "parameterType": "NUMBER_INTEGER"
+        },
+        "hpt_n_estimators_min": {
+          "defaultValue": 50.0,
+          "isOptional": true,
+          "parameterType": "NUMBER_INTEGER"
+        },
+        "hpt_n_estimators_scale": {
+          "defaultValue": "UNIT_LINEAR_SCALE",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "hpt_parallel_trial_count": {
+          "defaultValue": 2.0,
+          "isOptional": true,
+          "parameterType": "NUMBER_INTEGER"
+        },
+        "hpt_reg_lambda_max": {
+          "defaultValue": 10.0,
+          "isOptional": true,
+          "parameterType": "NUMBER_DOUBLE"
+        },
+        "hpt_reg_lambda_min": {
+          "defaultValue": 0.1,
+          "isOptional": true,
+          "parameterType": "NUMBER_DOUBLE"
+        },
+        "hpt_reg_lambda_scale": {
+          "defaultValue": "UNIT_LOG_SCALE",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "hpt_search_algorithm": {
+          "defaultValue": "RANDOM_SEARCH",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "location": {
+          "parameterType": "STRING"
+        },
+        "project": {
+          "parameterType": "STRING"
+        },
+        "sql_end_date_str": {
+          "parameterType": "STRING"
+        },
+        "sql_max_data_points": {
+          "parameterType": "NUMBER_INTEGER"
+        },
+        "sql_query_path": {
+          "parameterType": "STRING"
+        },
+        "staging_bucket": {
+          "parameterType": "STRING"
+        },
+        "train_end_date": {
+          "parameterType": "STRING"
+        },
+        "train_series_id_column": {
+          "parameterType": "STRING"
+        },
+        "train_target_column": {
+          "parameterType": "STRING"
+        },
+        "train_time_column": {
+          "parameterType": "STRING"
+        },
+        "val_end_date": {
+          "parameterType": "STRING"
+        },
+        "worker_container_uri": {
+          "defaultValue": "europe-west1-docker.pkg.dev/avisia-certification-ml-yde/chicago-taxis-demo/forecasting-pipeline:latest",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "worker_machine_type": {
+          "defaultValue": "n1-standard-4",
+          "isOptional": true,
+          "parameterType": "STRING"
+        }
+      }
+    }
+  },
+  "schemaVersion": "2.1.0",
+  "sdkVersion": "kfp-2.12.1"
+}
