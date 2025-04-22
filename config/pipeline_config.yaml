@@ -7,7 +7,7 @@ gcp:
   # URI de l'image Docker personnalisée pour les composants
   custom_image_uri: "europe-west1-docker.pkg.dev/avisia-certification-ml-yde/chicago-taxis-demo/forecasting-pipeline:latest"
   # Optionnel: Compte de service pour l'exécution du pipeline
-  # service_account: "your-pipeline-runner-sa@your-project-id.iam.gserviceaccount.com"
+  service_account: "491780955535-compute@developer.gserviceaccount.com"
 
 bigquery:
   dataset_id: "chicago_taxis" # Dataset pour les tables générées
@@ -28,7 +28,7 @@ training: # Section pour les paramètres liés à l'entraînement (script train_
 
 # Paramètres de haut niveau utilisés par le pipeline
 # (Placés ici pour correspondre à l'accès direct config.get(...) dans run_pipeline.py)
-enable_hpt: True # Mettre à True pour activer HPT
+enable_hpt: False # Mettre à True pour activer HPT
 train_end_date: "2023-10-01T00:00:00" # Correspond à 'train_end_date' dans le pipeline
 val_end_date: "2023-11-22T00:00:00"   # Correspond à 'val_end_date' dans le pipeline
 default_hyperparameters: # Correspond à 'default_hyperparameters' (utilisé si enable_hpt=False)
@@ -52,7 +52,7 @@ hpt_params: # Section pour les paramètres *spécifiques* à régler par HPT
   n_estimators:
     min: 50
     max: 500
-    scale: "UNIT_LINEAR_SCALE" # Doit être une valeur valide de l'enum hpt.ScaleType
+    scale: "UNIT_LINEAR_SCALE" # Doit être une valeur valide de l'enum aiplatform.ScaleType
   learning_rate:
     min: 0.01
     max: 0.3
