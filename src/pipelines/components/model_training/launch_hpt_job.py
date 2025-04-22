@@ -1,12 +1,12 @@
 # src/pipelines/components/model_training/launch_hpt_job.py
 
-# Correction : Recevoir les specs HPT comme paramètres simples et reconstruire
+# Correction : Ajout de logs détaillés pour le débogage HPT spec construction
 
 from kfp.dsl import component, Input, Output, Model, Artifact
-# --- MODIFICATION : Any ajouté ---
 from typing import Dict, List, NamedTuple, Any
 import logging
 import os
+import traceback # Importer traceback pour afficher les exceptions complètes
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,72 +20,58 @@ def launch_hpt_job(
     location: str,
     staging_bucket: str,
     display_name_prefix: str,
-    worker_pool_spec: Dict, # OK
-    enable_hpt: bool, # OK
-    # --- MODIFICATION : Supprimer hpt_config ---
-    # hpt_config: Dict, # SUPPRIMÉ
-    default_hyperparameters: Dict[str, Any], # OK
-    bq_table_name_path: Input[Artifact], # OK
-    static_args: Dict, # OK (sans bq_table initialement)
-    model_gcs_path: Output[Model], # OK
-
-    # --- MODIFICATION : Ajouter les paramètres simples pour HPT ---
+    worker_pool_spec: Dict,
+    enable_hpt: bool,
+    default_hyperparameters: Dict[str, Any],
+    bq_table_name_path: Input[Artifact],
+    static_args: Dict,
+    model_gcs_path: Output[Model],
+    # Paramètres HPT simples
     hpt_metric_tag: str,
     hpt_metric_goal: str,
     hpt_max_trial_count: int,
     hpt_parallel_trial_count: int,
     hpt_search_algorithm: str,
-    # Paramètres pour n_estimators
     hpt_n_estimators_min: int,
     hpt_n_estimators_max: int,
     hpt_n_estimators_scale: str,
-    # Paramètres pour learning_rate
     hpt_learning_rate_min: float,
     hpt_learning_rate_max: float,
     hpt_learning_rate_scale: str,
-    # Paramètres pour max_depth
     hpt_max_depth_min: int,
     hpt_max_depth_max: int,
     hpt_max_depth_scale: str,
-    # Paramètres pour reg_lambda
     hpt_reg_lambda_min: float,
     hpt_reg_lambda_max: float,
     hpt_reg_lambda_scale: str,
     # Ajouter d'autres ici...
-
 ) -> NamedTuple("Outputs", [("best_trial_id", str), ("best_rmse", float)]):
     """
     Lance un job Vertex AI HPT ou CustomJob.
     Reconstruit la spécification des paramètres HPT à partir d'arguments simples.
-    [...]
-    Args:
-        [...]
-        # hpt_config: SUPPRIMÉ
-        default_hyperparameters: Dictionnaire des HPs par défaut (si HPT désactivé).
-        bq_table_name_path: Artefact d'entrée contenant le nom de la table BQ.
-        static_args: Arguments statiques pour le script d'entraînement (excluant bq_table).
-        model_gcs_path: Artefact de sortie pour l'URI du modèle.
-        hpt_metric_tag: Tag de la métrique HPT.
-        hpt_metric_goal: Objectif HPT (MINIMIZE/MAXIMIZE).
-        hpt_max_trial_count: Nombre max d'essais.
-        hpt_parallel_trial_count: Nombre d'essais parallèles.
-        hpt_search_algorithm: Algorithme de recherche HPT.
-        hpt_n_estimators_min: Borne min pour n_estimators.
-        hpt_n_estimators_max: Borne max pour n_estimators.
-        hpt_n_estimators_scale: Échelle pour n_estimators.
-        # ... (autres paramètres HPT simples) ...
-    Returns:
-        NamedTuple contenant best_trial_id et best_rmse.
     """
     # Imports internes
     from google.cloud import aiplatform
-    from google.cloud.aiplatform import hyperparameter_tuning as hpt
+    # --- MODIFICATION : Importer StudySpec depuis v1.types ---
+    from google.cloud.aiplatform_v1.types import StudySpec
+    from google.cloud.aiplatform import hyperparameter_tuning as hpt # Gardé pour la classe HyperparameterTuningJob
     import time
     from collections import namedtuple
-    import json # Garder json pour analyse potentielle d'args si nécessaire
-    import logging
+    import json
+    import logging # Importer à nouveau ici
+    import traceback # Importer traceback pour afficher les exceptions complètes
 
     Outputs = namedtuple("Outputs", ["best_trial_id", "best_rmse"])
+
+    # --- DEBUG : Afficher les paramètres HPT simples reçus ---
+    logging.info("--- Début launch_hpt_job ---")
+    logging.info(f"Paramètres HPT reçus:")
+    logging.info(f"  n_estimators: min={hpt_n_estimators_min} (type: {type(hpt_n_estimators_min)}), max={hpt_n_estimators_max} (type: {type(hpt_n_estimators_max)}), scale='{hpt_n_estimators_scale}'")
+    logging.info(f"  learning_rate: min={hpt_learning_rate_min} (type: {type(hpt_learning_rate_min)}), max={hpt_learning_rate_max} (type: {type(hpt_learning_rate_max)}), scale='{hpt_learning_rate_scale}'")
+    logging.info(f"  max_depth: min={hpt_max_depth_min} (type: {type(hpt_max_depth_min)}), max={hpt_max_depth_max} (type: {type(hpt_max_depth_max)}), scale='{hpt_max_depth_scale}'")
+    logging.info(f"  reg_lambda: min={hpt_reg_lambda_min} (type: {type(hpt_reg_lambda_min)}), max={hpt_reg_lambda_max} (type: {type(hpt_reg_lambda_max)}), scale='{hpt_reg_lambda_scale}'")
+    logging.info(f"  metric_tag='{hpt_metric_tag}', metric_goal='{hpt_metric_goal}', max_trials={hpt_max_trial_count}, parallel_trials={hpt_parallel_trial_count}, algorithm='{hpt_search_algorithm}'")
+    # ---------------------------------------------------------
 
     aiplatform.init(project=project, location=location, staging_bucket=staging_bucket)
     timestamp = time.strftime("%Y%m%d%H%M%S")
@@ -94,31 +80,27 @@ def launch_hpt_job(
     best_rmse_out = float('nan')
     model_uri = None
 
-    # Lire le nom de la table depuis le fichier d'artefact (logique identique)
+    # Lire le nom de la table (logique identique)
     try:
-        with open(bq_table_name_path.path, 'r') as f:
-            bq_table_name_str = f.read().strip()
+        with open(bq_table_name_path.path, 'r') as f: bq_table_name_str = f.read().strip()
         if not bq_table_name_str: raise ValueError("Fichier nom table vide.")
         logging.info(f"Nom table BQ lu: '{bq_table_name_str}'")
     except Exception as read_e:
-        logging.error(f"Erreur lecture nom table depuis {bq_table_name_path.path}: {read_e}")
+        logging.error(f"Erreur lecture nom table: {read_e}")
         raise RuntimeError(f"Impossible lire nom table BQ: {read_e}") from read_e
 
-    # Ajouter le nom lu aux arguments statiques (logique identique)
+    # Ajouter nom table aux args statiques (logique identique)
     current_static_args = static_args.copy()
     current_static_args['bq_table'] = bq_table_name_str
     base_args_list = [f"--{key}={value}" for key, value in current_static_args.items()]
     logging.info(f"Args statiques base pour script train: {base_args_list}")
 
-    # Répertoire de sortie (logique identique)
     base_output_dir = f"{staging_bucket}/{display_name}"
     logging.info(f"Répertoire sortie base job: {base_output_dir}")
 
     if enable_hpt:
         logging.info("Hyperparameter Tuning activé. Configuration du job HPT...")
         script_args = base_args_list + ["--hpt_enabled=True"]
-
-        # Préparer worker_pool (logique identique)
         worker_pool = [
             {"machine_spec": {"machine_type": worker_pool_spec["machine_type"]},
              "replica_count": 1,
@@ -127,81 +109,111 @@ def launch_hpt_job(
         ]
         logging.info(f"Worker pool spec: {worker_pool}")
 
-        # --- MODIFICATION : Reconstruire study_spec_params à partir des args simples ---
+        # --- Reconstruire study_spec_params avec StudySpec.ParameterSpec (types v1) ---
         study_spec_params = []
-        logging.info("Reconstruction de HPT parameter spec à partir des arguments simples...")
+        logging.info("Reconstruction de HPT parameter spec via types v1 (StudySpec)...")
 
         # n_estimators (Integer)
-        try: # Utiliser try/except pour robustesse des conversions d'échelle
-            scale_n_est = getattr(hpt.ScaleType, hpt_n_estimators_scale, hpt.ScaleType.UNIT_LINEAR_SCALE)
-            study_spec_params.append(hpt.IntegerParameterSpec(
-                parameter_id='n_estimators', min_value=hpt_n_estimators_min, max_value=hpt_n_estimators_max, scale_type=scale_n_est
-            ))
-            logging.info(f"Ajouté spec pour n_estimators ({hpt_n_estimators_min}-{hpt_n_estimators_max}, scale={hpt_n_estimators_scale})")
-        except AttributeError: logging.warning(f"Échelle invalide '{hpt_n_estimators_scale}' pour n_estimators. Utilisation de UNIT_LINEAR_SCALE.")
-        except Exception as e: logging.error(f"Erreur construction spec n_estimators: {e}")
+        try:
+            logging.info("Tentative construction spec 'n_estimators'...")
+            scale_enum_value = StudySpec.ParameterSpec.ScaleType[hpt_n_estimators_scale]
+            spec = StudySpec.ParameterSpec(
+                parameter_id='n_estimators',
+                integer_value_spec=StudySpec.ParameterSpec.IntegerValueSpec(
+                    min_value=hpt_n_estimators_min, max_value=hpt_n_estimators_max
+                ),
+                scale_type=scale_enum_value
+            )
+            study_spec_params.append(spec)
+            logging.info(f"  SUCCÈS: Ajouté spec v1 pour n_estimators")
+        except KeyError:
+            logging.warning(f"  ÉCHELLE INVALIDE (KeyError) '{hpt_n_estimators_scale}' pour n_estimators.")
+        except Exception as e:
+            logging.error(f"  ERREUR construction spec v1 n_estimators: Type={type(e)}, Msg={e}")
+            logging.error(traceback.format_exc())
 
         # learning_rate (Double)
         try:
-            scale_lr = getattr(hpt.ScaleType, hpt_learning_rate_scale, hpt.ScaleType.UNIT_LINEAR_SCALE)
-            study_spec_params.append(hpt.DoubleParameterSpec(
-                parameter_id='learning_rate', min_value=hpt_learning_rate_min, max_value=hpt_learning_rate_max, scale_type=scale_lr
-            ))
-            logging.info(f"Ajouté spec pour learning_rate ({hpt_learning_rate_min}-{hpt_learning_rate_max}, scale={hpt_learning_rate_scale})")
-        except AttributeError: logging.warning(f"Échelle invalide '{hpt_learning_rate_scale}' pour learning_rate. Utilisation de UNIT_LINEAR_SCALE.")
-        except Exception as e: logging.error(f"Erreur construction spec learning_rate: {e}")
+            logging.info("Tentative construction spec 'learning_rate'...")
+            scale_enum_value = StudySpec.ParameterSpec.ScaleType[hpt_learning_rate_scale]
+            spec = StudySpec.ParameterSpec(
+                parameter_id='learning_rate',
+                double_value_spec=StudySpec.ParameterSpec.DoubleValueSpec(
+                    min_value=hpt_learning_rate_min, max_value=hpt_learning_rate_max
+                ),
+                scale_type=scale_enum_value
+            )
+            study_spec_params.append(spec)
+            logging.info(f"  SUCCÈS: Ajouté spec v1 pour learning_rate")
+        except KeyError:
+            logging.warning(f"  ÉCHELLE INVALIDE (KeyError) '{hpt_learning_rate_scale}' pour learning_rate.")
+        except Exception as e:
+            logging.error(f"  ERREUR construction spec v1 learning_rate: Type={type(e)}, Msg={e}")
+            logging.error(traceback.format_exc())
 
         # max_depth (Integer)
         try:
-            scale_depth = getattr(hpt.ScaleType, hpt_max_depth_scale, hpt.ScaleType.UNIT_LINEAR_SCALE)
-            study_spec_params.append(hpt.IntegerParameterSpec(
-                parameter_id='max_depth', min_value=hpt_max_depth_min, max_value=hpt_max_depth_max, scale_type=scale_depth
-            ))
-            logging.info(f"Ajouté spec pour max_depth ({hpt_max_depth_min}-{hpt_max_depth_max}, scale={hpt_max_depth_scale})")
-        except AttributeError: logging.warning(f"Échelle invalide '{hpt_max_depth_scale}' pour max_depth. Utilisation de UNIT_LINEAR_SCALE.")
-        except Exception as e: logging.error(f"Erreur construction spec max_depth: {e}")
+            logging.info("Tentative construction spec 'max_depth'...")
+            scale_enum_value = StudySpec.ParameterSpec.ScaleType[hpt_max_depth_scale]
+            spec = StudySpec.ParameterSpec(
+                parameter_id='max_depth',
+                integer_value_spec=StudySpec.ParameterSpec.IntegerValueSpec(
+                    min_value=hpt_max_depth_min, max_value=hpt_max_depth_max
+                ),
+                scale_type=scale_enum_value
+            )
+            study_spec_params.append(spec)
+            logging.info(f"  SUCCÈS: Ajouté spec v1 pour max_depth")
+        except KeyError:
+            logging.warning(f"  ÉCHELLE INVALIDE (KeyError) '{hpt_max_depth_scale}' pour max_depth.")
+        except Exception as e:
+            logging.error(f"  ERREUR construction spec v1 max_depth: Type={type(e)}, Msg={e}")
+            logging.error(traceback.format_exc())
 
         # reg_lambda (Double)
         try:
-            scale_lambda = getattr(hpt.ScaleType, hpt_reg_lambda_scale, hpt.ScaleType.UNIT_LINEAR_SCALE)
-            study_spec_params.append(hpt.DoubleParameterSpec(
-                parameter_id='reg_lambda', min_value=hpt_reg_lambda_min, max_value=hpt_reg_lambda_max, scale_type=scale_lambda
-            ))
-            logging.info(f"Ajouté spec pour reg_lambda ({hpt_reg_lambda_min}-{hpt_reg_lambda_max}, scale={hpt_reg_lambda_scale})")
-        except AttributeError: logging.warning(f"Échelle invalide '{hpt_reg_lambda_scale}' pour reg_lambda. Utilisation de UNIT_LINEAR_SCALE.")
-        except Exception as e: logging.error(f"Erreur construction spec reg_lambda: {e}")
+            logging.info("Tentative construction spec 'reg_lambda'...")
+            scale_enum_value = StudySpec.ParameterSpec.ScaleType[hpt_reg_lambda_scale]
+            spec = StudySpec.ParameterSpec(
+                parameter_id='reg_lambda',
+                double_value_spec=StudySpec.ParameterSpec.DoubleValueSpec(
+                    min_value=hpt_reg_lambda_min, max_value=hpt_reg_lambda_max
+                ),
+                scale_type=scale_enum_value
+            )
+            study_spec_params.append(spec)
+            logging.info(f"  SUCCÈS: Ajouté spec v1 pour reg_lambda")
+        except KeyError:
+            logging.warning(f"  ÉCHELLE INVALIDE (KeyError) '{hpt_reg_lambda_scale}' pour reg_lambda.")
+        except Exception as e:
+            logging.error(f"  ERREUR construction spec v1 reg_lambda: Type={type(e)}, Msg={e}")
+            logging.error(traceback.format_exc())
 
-        # Ajouter la logique pour d'autres hyperparamètres ici si nécessaire...
+        logging.info(f"Paramètres study spec v1 reconstruits final: {study_spec_params}")
 
-        logging.info(f"Paramètres study spec reconstruits : {study_spec_params}")
-        # --- Fin de la reconstruction ---
-
-        # Vérifier si study_spec_params est vide (si toutes les constructions ont échoué)
         if not study_spec_params:
+             logging.error("La liste study_spec_params est vide après tentatives de construction.")
              raise ValueError("Aucun paramètre HPT valide n'a pu être construit à partir des entrées fournies.")
 
-        # Lancer le job HPT en utilisant les specs reconstruites
+        # Lancer le job HPT (logique identique)
         hpt_job = aiplatform.HyperparameterTuningJob(
             display_name=display_name,
             custom_job=aiplatform.CustomJob(
                 display_name=display_name + "_trial-base",
                 worker_pool_specs=worker_pool,
-                base_output_directory=base_output_dir,
+                base_output_directory=base_output_dir, # OK ici car dans HPTJob
             ),
-            # Utiliser les paramètres simples directement pour la config générale
             metric_spec={hpt_metric_tag: hpt_metric_goal},
-            parameter_spec=study_spec_params, # Utiliser la liste reconstruite
+            parameter_spec=study_spec_params, # Utiliser la liste reconstruite (type v1)
             max_trial_count=hpt_max_trial_count,
             parallel_trial_count=hpt_parallel_trial_count,
             search_algorithm=hpt_search_algorithm,
         )
-
         logging.info(f"Lancement du job HPT {display_name}...")
-        # ... (Reste du code HPT : run, refresh, find best trial, model_uri) ...
+        # ... (run, refresh, find best trial, model_uri - reste identique) ...
         hpt_job.run(sync=True)
         logging.info(f"Job HPT {hpt_job.resource_name} terminé.")
         hpt_job.refresh()
-
         valid_trials = [t for t in hpt_job.trials if t.state == aiplatform.gapic.Trial.State.SUCCEEDED and t.final_measurement]
         if not valid_trials: raise RuntimeError("Aucun essai HPT réussi.")
         logging.info(f"Trouvé {len(valid_trials)} essais réussis.")
@@ -209,43 +221,46 @@ def launch_hpt_job(
             if hpt_metric_goal == "MAXIMIZE": best_trial = max(valid_trials, key=lambda t: t.final_measurement.metrics[0].value)
             else: best_trial = min(valid_trials, key=lambda t: t.final_measurement.metrics[0].value)
         except (IndexError, KeyError): raise RuntimeError("Échec détermination meilleur essai (métrique manquante).")
-
         best_trial_id_out = best_trial.id
         best_rmse_out = best_trial.final_measurement.metrics[0].value
         logging.info(f"Meilleur essai: ID={best_trial_id_out}, Métrique ({hpt_metric_tag}): {best_rmse_out}")
         model_uri = f"{base_output_dir}/{best_trial.id}/model/model.joblib"
         logging.info(f"URI meilleur modèle: {model_uri}")
 
-
     else: # Cas Custom Job simple (non HPT)
+        # ... (Logique CustomJob identique à la version précédente corrigée) ...
         logging.info("Hyperparameter Tuning désactivé. Lancement Custom Job unique...")
-        # Utiliser base_args_list mis à jour
         script_args = base_args_list + ["--hpt_enabled=False"]
-        # Ajouter les HPs par défaut (ceux définis dans le pipeline et passés via default_hyperparameters)
-        for key, value in default_hyperparameters.items():
-            script_args.append(f"--{key}={value}")
+        for key, value in default_hyperparameters.items(): script_args.append(f"--{key}={value}")
         logging.info(f"Args script pour Custom Job: {script_args}")
-
-        # Préparer worker_pool (logique identique)
-        worker_pool = [
+        worker_pool = [ # Recréer ici car worker_pool était défini dans le bloc if HPT
             {"machine_spec": {"machine_type": worker_pool_spec["machine_type"]},
              "replica_count": 1,
              "container_spec": {"image_uri": worker_pool_spec["container_uri"], "args": script_args},
             }
         ]
-        # Définir et lancer Custom Job (logique identique)
-        custom_job = aiplatform.CustomJob(display_name=display_name, worker_pool_specs=worker_pool)
+        custom_job = aiplatform.CustomJob(display_name=display_name, worker_pool_specs=worker_pool) # Sans base_output_directory
         logging.info(f"Lancement Custom Job {display_name}...")
         custom_job.run(sync=True)
         logging.info(f"Custom Job {custom_job.resource_name} terminé.")
         custom_job.refresh()
-        job_output_dir = custom_job.gca_resource.job_spec.base_output_directory.output_uri_prefix
-        model_uri = f"{job_output_dir}/model/model.joblib"
-        logging.info(f"URI modèle pour Custom Job: {model_uri}")
+        try:
+            if hasattr(custom_job.gca_resource, 'job_spec') and hasattr(custom_job.gca_resource.job_spec, 'base_output_directory') and hasattr(custom_job.gca_resource.job_spec.base_output_directory, 'output_uri_prefix'):
+                job_output_dir = custom_job.gca_resource.job_spec.base_output_directory.output_uri_prefix
+                logging.info(f"Répertoire sortie récupéré via gca_resource: {job_output_dir}")
+                model_uri = f"{job_output_dir}/model/model.joblib"
+            else:
+                logging.warning("Impossible récupérer base_output_directory via gca_resource. Construction manuelle.")
+                model_uri = f"{base_output_dir}/model/model.joblib"
+        except AttributeError as ae:
+             logging.warning(f"Attribut manquant récupération base_output_directory: {ae}. Construction manuelle.")
+             model_uri = f"{base_output_dir}/model/model.joblib"
+        logging.info(f"URI modèle construit pour Custom Job: {model_uri}")
 
 
     # Écrire l'URI du modèle (logique identique)
     if model_uri is None:
+         logging.error("model_uri n'a pas été défini.")
          raise RuntimeError("Échec détermination URI modèle après job entraînement.")
     logging.info(f"URI final meilleur modèle : {model_uri}")
     model_gcs_path.uri = model_uri
